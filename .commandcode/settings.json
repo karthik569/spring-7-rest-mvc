@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(kill -9 26593; sleep 2; curl -s http://localhost:8080/ > /dev/null 2>&1 && echo \"port still in use\" || echo \"port free\")",
+      "Shell(mvn:*)",
+      "Shell(curl -sv http://localhost:8080/beer 2>&1)",
+      "Shell(curl -sv http://localhost:8080/api/v1/beer 2>&1)",
+      "Shell(curl -sv http://localhost:8080/api/v1/beer/551a4148-f78f-4569-8dd4-54e64c6fcb72 2>&1)",
+      "Shell(curl -sv http://localhost:8080/api/v1/customer 2>&1)",
+      "Shell(mysql:*)",
+      "Shell(mysqld_safe:*)",
+      "Shell(sleep:*)",
+      "Shell(true:*)",
+      "Shell(kill $(ps aux | grep 'Spring7RestMvcApplication' | grep -v grep | awk '{print $2}') 2>/dev/null; sleep 2; echo \"stopped\")",
+      "Shell(SPRING_PROFILES_ACTIVE=localmysql mvn spring-boot:run > /tmp/spring-mysql.log 2>&1 & echo \"PID: $!\")",
+      "Shell(curl -s http://localhost:8080/api/v1/beer 2 >& 1)",
+      "Shell(curl -sv http://localhost:8080/api/v1/beer 2 >& 1)",
+      "Shell(nohup mvn spring-boot:run -Dspring-boot.run.profiles=localmysql > /tmp/spring-mysql.log 2>&1 & echo \"PID: $!\" sleep 5 tail -5 /tmp/spring-mysql.log)",
+      "Shell(curl -s http://localhost:8080/api/v1/customer 2>&1)",
+      "Shell(curl -s http://localhost:8080/api/v1/beer/000212bc-6178-4e38-b48b-b26da298bb2e 2>&1)",
+      "Shell(curl -sv -X POST http://localhost:8080/api/v1/beer -H \"Content-Type: application/json\" -d '{\"beerName\":\"Test Beer\",\"beerStyle\":\"ALE\",\"price\":5.99,\"upc\":\"9999\",\"quantityOnHand\":10}' 2>&1)",
+      "Shell(curl -s http://localhost:8080/api/v1/beer/92c24afa-46c6-4755-a229-bed2d8cc4dff 2>&1)",
+      "Shell(curl -sv -X PUT http://localhost:8080/api/v1/beer/92c24afa-46c6-4755-a229-bed2d8cc4dff -H \"Content-Type: application/json\" -d '{\"beerName\":\"Updated Beer\",\"beerStyle\":\"STOUT\",\"price\":9.99,\"upc\":\"8888\",\"quantityOnHand\":20}' 2>&1)",
+      "Shell(curl -sv -X PATCH http://localhost:8080/api/v1/beer/92c24afa-46c6-4755-a229-bed2d8cc4dff -H \"Content-Type: application/json\" -d '{\"price\":14.99}' 2>&1)",
+      "Shell(curl -sv -X DELETE http://localhost:8080/api/v1/beer/92c24afa-46c6-4755-a229-bed2d8cc4dff 2>&1)",
+      "Shell(curl -sv http://localhost:8080/api/v1/beer/92c24afa-46c6-4755-a229-bed2d8cc4dff 2>&1)",
+      "Shell(git:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  },
+  "tasteLearning": true
+}

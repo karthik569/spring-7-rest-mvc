@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git log 92-query-beer-style-search..HEAD --oneline; echo \"=== ports ===\"; \\(ss -tln 2>/dev/null || netstat -tln 2>/dev/null\\) | grep -E '3306|8080' || echo \"no 3306/8080 listeners\"; echo \"=== java/mvn procs ===\"; ps aux 2>/dev/null | grep -E 'java|mariadb' | grep -v grep | head -5 || echo none)",
+      "Bash(pgrep -af \"Spring7RestMvcApplication|spring-boot:run\" || echo \"no app processes\"; echo \"---\"; \\(ss -tln 2>/dev/null || netstat -tln\\) | grep -E '8080|3306' || echo \"no listeners on 8080/3306\")",
+      "Bash(pgrep -a java || echo \"no java processes\"\necho \"--- port checks \\(bash /dev/tcp\\) ---\"\nfor p in 8080 3306; do \\(timeout 2 bash -c \"</dev/tcp/127.0.0.1/$p\" 2>/dev/null && echo \"$p OPEN\"\\) || echo \"$p closed\"; done)",
+      "Bash(/data/data/com.termux/files/usr/bin/mariadb-admin --socket=/data/data/com.termux/files/usr/var/run/mysqld.sock --user=root shutdown 2>&1 | grep -v WARNING; echo \"shutdown command issued\"\nfor i in $\\(seq 1 15\\); do if ! timeout 1 bash -c '</dev/tcp/127.0.0.1/3306' 2>/dev/null; then echo \"3306 closed after ~${i}s\"; break; fi; sleep 1; done\npgrep -a mariadbd || echo \"no mariadbd processes\")",
+      "Bash(git checkout -b 95-page-create-page-request origin/95-page-create-page-request 2>&1 | tail -2; echo \"=== HEAD ===\"; git log --oneline -1 | cat; echo \"=== diff stat 94 -> 95 ===\"; git diff 94-page-add-parameters..HEAD --stat | cat)"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+# Taste Profile
+- Wants modified source code explicitly shown when iterating across branches (complained 3× when omitted). Confidence: 0.85
+- Wants complete curl output, not truncated/summarized. Confidence: 0.7
+- Wants the app actually launched and its endpoints exercised with live curl requests as verification (asked to "run this app and run curl", and repeatedly to "run app" when reviewing branches) — reading code statically is not enough. Confidence: 0.85
+- Wants code explained after showing run output. Confidence: 0.75
+- Wants comprehensive, layered architectural explanations (responded "continue" to a detailed code breakdown) and will periodically request an exhaustive "complete code deep dive" covering every source file and layer, not just the branch diff. Confidence: 0.8
+- Prefers installed system tools (maven, mariadb) over Docker/wrapper scripts. Explicitly requested "use installed maven and mariadb". Confidence: 0.9
+- Prefers MariaDB as runtime database over H2 in-memory. Confidence: 0.9
+- Wants MariaDB started only when a run actually requires it — explicitly instructed not to start it unnecessarily (e.g. for test-only changes that run on the H2 test datasource). Confidence: 0.9
+- Uses sequential numeric branch prefixes (e.g., `95-...`, `96-...`) to order git branches and identify the "next" remote branch by incrementing the prefix. Confidence: 0.75
+- Maintains and updates a session/branch changelog markdown file (e.g. SESSION_BRANCH_CHANGELOG.md) documenting each branch's changes — code diffs, modified code explanations, JSON response shape changes, test results, and noted edge cases. Confidence: 0.9
+- Wants the app and database processes shut down once verification is done rather than left running (repeatedly asked to "stop app and mariadb" after each run). Confidence: 0.5
+- Works through the repository's branches one at a time, wanting the same ritual for each: check out the next remote branch, run the app, explain the branch's code changes, and update the changelog md before moving on (repeats this instruction verbatim branch after branch). Confidence: 0.85
+- Wants commands such as curl examples delivered in a copy-paste-friendly form (asked for a curl command to be copied to the clipboard). Confidence: 0.5

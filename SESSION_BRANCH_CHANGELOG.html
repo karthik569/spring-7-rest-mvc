@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Session Branch Change Log</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --code-bg: #f6f8fa;
+  --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --border: #3d444d;
+    --code-bg: #151b23;
+    --accent: #4493f8;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 2rem 1rem 4rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+main {
+  max-width: 900px;
+  margin: 0 auto;
+}
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 85%;
+  background: var(--code-bg);
+  padding: .2em .4em;
+  border-radius: 6px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  line-height: 1.45;
+}
+pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 85%;
+}
+blockquote {
+  margin: 1em 0;
+  padding: 0 1em;
+  color: var(--muted);
+  border-left: .25em solid var(--border);
+}
+table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: .4em .8em;
+  text-align: left;
+}
+th { background: var(--code-bg); font-weight: 600; }
+tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 50%, transparent); }
+hr {
+  border: none;
+  border-top: 2px solid var(--border);
+  margin: 2.5em 0;
+}
+img { max-width: 100%; }
+ul, ol { padding-left: 1.6em; }
+li { margin: .2em 0; }
+pre.mermaid {
+  background: transparent;
+  border: 1px solid var(--border);
+  text-align: center;
+  padding: 1.2rem .5rem;
+}
+pre.mermaid svg { max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Session Branch Change Log</h1>
+<p>This document records the branch changes inspected during the current session. It focuses on the branches actually checked out, compared, run, or discussed. Existing user notes such as <code>MARIADB_LOCALMYSQL_RUN.md</code> remain separate.</p>
+<h2>Visual Overview (Diagrams)</h2>
+<p>Diagrams below summarize the architecture and the key runtime behaviors captured in this changelog. Rendered with Mermaid (requires network access for the CDN script).</p>
+
+<h3>Application architecture</h3>
+<pre class="mermaid">
+flowchart LR
+    Client([HTTP client / curl]) --> C["BeerController<br/>/api/v1/beer"]
+    C --> S["BeerService (interface)"]
+    S --> J["BeerServiceJPA"]
+    J --> M["BeerMapper<br/>(MapStruct)"]
+    J --> R["BeerRepository<br/>(Spring Data JPA)"]
+    R --> H["Hibernate 7"]
+    H --> DB[("MariaDB restdb<br/>(Flyway V1-V5)")]
+    SEC["Spring Security filter chain<br/>(branch 110+)"] -.-> C
+</pre>
+
+<h3>Entity relationships — Beer-centric view</h3>
+<pre class="mermaid">
+erDiagram
+    BEER }o--o{ CATEGORY : "beer_category join table"
+    BEER ||--o{ BEER_ORDER_LINE : "ordered in (see Order-centric view)"
+
+    BEER {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @JdbcTypeCode(SqlTypes.CHAR) @Column(length=36, columnDefinition=varchar, updatable=false, nullable=false)"
+        Integer version "@Version optimistic lock"
+        String beerName "@NotNull @NotBlank @Size(max=50) @Column(length=50)"
+        BeerStyle beerStyle "@NotNull @JdbcTypeCode(SqlTypes.SMALLINT) enum ordinal LAGER..SAISON"
+        String upc "@NotNull @NotBlank @Size(max=255)"
+        Integer quantityOnHand "no annotations, nulled in DTO unless showInventory=true"
+        BigDecimal price "@NotNull"
+        LocalDateTime createdDate "@CreationTimestamp"
+        LocalDateTime updateDate "@UpdateTimestamp"
+        Set beerOrderLines "@OneToMany(mappedBy=beer) inverse collection"
+        Set categories "@Builder.Default @ManyToMany @JoinTable(name=beer_category, joinColumns=beer_id, inverseJoinColumns=category_id) init new HashSet"
+    }
+
+    CATEGORY {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @JdbcTypeCode(SqlTypes.CHAR) @Column(length=36, columnDefinition=varchar(36), updatable=false, nullable=false)"
+        Long version "@Version optimistic lock"
+        Timestamp createdDate "@CreationTimestamp @Column(updatable=false)"
+        Timestamp lastModifiedDate "@UpdateTimestamp"
+        String description "no annotations, used in equals and hashCode"
+        Set beers "@Builder.Default @ManyToMany @JoinTable(name=beer_category, joinColumns=category_id, inverseJoinColumns=beer_id) init new HashSet"
+    }
+
+    BEER_ORDER_LINE {
+        UUID id PK "full definition in Order-centric view"
+        UUID beer_id FK "@ManyToOne Beer"
+    }
+</pre>
+
+<h3>Entity relationships — Order-centric view</h3>
+<pre class="mermaid">
+erDiagram
+    CUSTOMER ||--o{ BEER_ORDER : "places (mappedBy customer)"
+    BEER_ORDER ||--o{ BEER_ORDER_LINE : "contains (mappedBy beerOrder)"
+    BEER_ORDER ||--o| BEER_ORDER_SHIPMENT : "ships via (OneToOne, cascade PERSIST)"
+    BEER ||--o{ BEER_ORDER_LINE : "ordered in (mappedBy beer)"
+
+    CUSTOMER {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @Column(length=36, columnDefinition=varchar, updatable=false, nullable=false) @JdbcTypeCode(SqlTypes.CHAR)"
+        String name "no annotations"
+        String email "@Column(length=255)"
+        Integer version "@Version optimistic lock"
+        LocalDateTime createdDate "no annotations (plain field)"
+        LocalDateTime updateDate "no annotations (plain field)"
+        Set beerOrders "@Builder.Default @OneToMany(mappedBy=customer) init new HashSet"
+    }
+
+    BEER_ORDER {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @JdbcTypeCode(SqlTypes.CHAR) @Column(length=36, columnDefinition=varchar(36), updatable=false, nullable=false)"
+        Long version "@Version optimistic lock"
+        Timestamp createdDate "@CreationTimestamp @Column(updatable=false)"
+        Timestamp lastModifiedDate "@UpdateTimestamp"
+        String customerRef "no annotations"
+        UUID customer_id FK "@ManyToOne Customer, setter adds this order to customer.beerOrders"
+        Set beerOrderLines "@OneToMany(mappedBy=beerOrder) inverse collection"
+        UUID beerOrderShipment_id FK "@OneToOne(cascade=CascadeType.PERSIST), setter links both sides"
+    }
+
+    BEER_ORDER_LINE {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @JdbcTypeCode(SqlTypes.CHAR) @Column(length=36, columnDefinition=varchar(36), updatable=false, nullable=false)"
+        Long version "@Version optimistic lock"
+        Timestamp createdDate "@CreationTimestamp @Column(updatable=false)"
+        Timestamp lastModifiedDate "@UpdateTimestamp"
+        UUID beerOrder_id FK "@ManyToOne BeerOrder"
+        UUID beer_id FK "@ManyToOne Beer"
+        Integer orderQuantity "field initializer = 0"
+        Integer quantityAllocated "field initializer = 0"
+    }
+
+    BEER_ORDER_SHIPMENT {
+        UUID id PK "@Id @GeneratedValue(generator=UUID) @UuidGenerator @JdbcTypeCode(SqlTypes.CHAR) @Column(length=36, columnDefinition=varchar(36), updatable=false, nullable=false)"
+        Long version "@Version optimistic lock"
+        UUID beerOrder_id FK "@OneToOne BeerOrder bidirectional inverse side"
+        String trackingNumber "no annotations"
+        Timestamp createdDate "@CreationTimestamp @Column(updatable=false)"
+        Timestamp lastModifiedDate "@UpdateTimestamp"
+    }
+
+    BEER {
+        UUID id PK "full definition in Beer-centric view"
+        String beerName "reference only"
+    }
+</pre>
+<p>Notes: class-level Lombok annotations — <code>Beer</code>: @Getter @Setter @Builder @Entity @NoArgsConstructor @AllArgsConstructor; <code>Customer</code>: @Getter @Setter @Builder @Entity @AllArgsConstructor @NoArgsConstructor; <code>BeerOrder</code>: @Getter @Setter @Entity @NoArgsConstructor @Builder plus an explicit all-args constructor calling the bidirectional setters; <code>BeerOrderLine</code>, <code>BeerOrderShipment</code>, <code>Category</code>: @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Entity @Builder. All IDs are UUID persisted as varchar(36) CHAR jdbc type; <code>isNew()</code> helpers on BeerOrder/BeerOrderLine check <code>id == null</code>. <code>beer_category</code> is the ManyToMany join table with <code>Beer.addCategory/removeCategory</code> helpers keeping both sides in sync. Schema created by Flyway migrations V1-V5.</p>
+
+<h3>Branch progression</h3>
+<pre class="mermaid">
+flowchart LR
+    B2["2-5<br/>Lombok builders &amp; constructors"] --> B90["90-92<br/>search basics"]
+    B90 --> B93["93<br/>complete search params"]
+    B93 --> B95["94-95<br/>paging params + PageRequest"]
+    B95 --> B98["96-98<br/>paging implemented"]
+    B98 --> B108["99-108<br/>order / category relations + persistence"]
+    B108 --> B109["109<br/>optimistic locking demo"]
+    B109 --> B110["110<br/>Spring Security dependency"]
+    B110 --> B111["111+<br/>security configuration ..."]
+</pre>
+
+<h3>Search + paging request (branches 91-98)</h3>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant c as curl client
+    participant ctrl as BeerController
+    participant svc as BeerServiceJPA
+    participant repo as BeerRepository
+    participant db as MariaDB
+
+    c->>ctrl: GET /api/v1/beer?beerName=IPA&amp;beerStyle=IPA&amp;pageNumber=1&amp;pageSize=25
+    ctrl->>ctrl: buildPageRequest: 1-based pageNumber → 0-based, cap 1000
+    ctrl->>svc: listBeersByNameAndStyle(name, style, showInventory, pageRequest)
+    svc->>repo: findAllByBeerNameIsLikeIgnoreCaseAndBeerStyle(...)
+    repo->>db: SELECT ... WHERE upper(beer_name) LIKE ? AND beer_style=? LIMIT ?
+    db-->>repo: rows (325 combined matches live)
+    repo-->>svc: Page[Beer]
+    svc->>svc: BeerMapper → BeerDTO, null quantityOnHand unless showInventory=true
+    svc-->>ctrl: Page[BeerDTO]
+    ctrl-->>c: 200 JSON {content, totalElements, page, pageSize}
+</pre>
+
+<h3>Optimistic locking conflict (branch 109)</h3>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as Client A
+    participant B as Client B
+    participant svc as BeerServiceJPA
+    participant db as MariaDB (beer.version = 3)
+
+    A->>svc: PUT /api/v1/beer/{id} (body "version" ignored - load-and-copy)
+    B->>svc: PUT /api/v1/beer/{id} (concurrent)
+    svc->>db: A: SELECT beer → loads version = 3
+    svc->>db: B: SELECT beer → loads version = 3
+    svc->>db: A: UPDATE ... SET version=4 WHERE id=? AND version=3
+    db-->>svc: A: 1 row updated ✓
+    svc->>db: B: UPDATE ... SET version=4 WHERE id=? AND version=3
+    db-->>svc: B: 0 rows updated ✗ (row now version=4)
+    svc-->>A: 204 No Content
+    Note over B,svc: Hibernate StaleStateException →<br/>ObjectOptimisticLockingFailureException
+    svc-->>B: 500 Internal Server Error (no 409 handler in CustomErrorController)
+</pre>
+<p>Live evidence: 12 concurrent PUTs → 4 × 204 and 8 × 500; sequential stale-version PUTs both return 204 because the client-sent version is never used.</p>
+
+<h3>Spring Security lockdown (branch 110)</h3>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant c as curl client
+    participant f as SecurityFilterChain (auto-config)
+    participant ctrl as BeerController
+
+    c->>f: GET /api/v1/beer (no credentials)
+    f-->>c: 401 Unauthorized + WWW-Authenticate: Basic realm="Realm"
+    c->>f: GET /api/v1/beer -u user:253dfcab-... (generated password from startup log)
+    f->>f: HTTP Basic auth against InMemoryUserDetailsManager
+    f->>ctrl: request passes filter chain
+    ctrl-->>c: 200 OK JSON page of beers
+</pre>
+<p>Integration tests on this branch fail with 401 (lines 114-116) until test security configuration is added in later branches.</p>
+<h2>Early Lombok branches</h2>
+<h3><code>2-lombok-builders</code></h3>
+<ul>
+<li>Added Lombok builder support to the early POJO/model classes.</li>
+<li><code>@Builder</code> generated fluent builders and reduced manual object-construction code.</li>
+<li>The related session note is <code>BRANCH_2_LOMBOK_BUILDERS.md</code>.</li>
+</ul>
+<h3><code>3-lombok-constructors</code></h3>
+<ul>
+<li>Added Lombok constructor generation to the model classes.</li>
+<li>No-argument constructors support framework/deserialization use cases.</li>
+<li>All-argument constructors support direct construction and builder integration.</li>
+<li>The related session note is <code>branch-3-lombok-constructors.md</code>.</li>
+</ul>
+<h2>Database and persistence branches</h2>
+<h3><code>69-mysql-configuration</code></h3>
+<ul>
+<li>Introduced the MySQL/MariaDB-oriented configuration direction.</li>
+<li>Added the database connection settings used by later <code>localmysql</code> runs.</li>
+</ul>
+<h3><code>70-mysql-dependencies</code></h3>
+<ul>
+<li>Added the MySQL JDBC connector dependency.</li>
+<li>Enabled the application to obtain JDBC connections to MySQL-compatible databases.</li>
+</ul>
+<h3><code>71-mysql-profile</code></h3>
+<ul>
+<li>Added the <code>localmysql</code> Spring profile.</li>
+<li>Configured the profile for the local MariaDB database <code>restdb</code>.</li>
+<li>Configured the <code>restadmin</code> credentials and MySQL JDBC URL.</li>
+</ul>
+<h3><code>72-console-log-sql</code></h3>
+<ul>
+<li>Enabled Hibernate SQL logging and formatting.</li>
+<li>Added bind-parameter trace logging to make generated SQL values visible during debugging.</li>
+</ul>
+<h3><code>73-jpa-updates-for-mysql</code></h3>
+<ul>
+<li>Updated UUID persistence for MySQL/MariaDB compatibility.</li>
+<li><code>@JdbcTypeCode(SqlTypes.CHAR)</code> stores UUID values as 36-character strings.</li>
+<li>Hibernate enum mapping was adjusted for a numeric database representation.</li>
+</ul>
+<h3><code>74-kikari-datasource-pool</code></h3>
+<ul>
+<li>Added HikariCP datasource configuration.</li>
+<li>Configured the pool name <code>RestDB-Pool</code>, pool sizing, and connection properties.</li>
+<li>Hikari reuses connections instead of opening a new database connection for every request.</li>
+</ul>
+<h3><code>75-db-create-scripts</code></h3>
+<ul>
+<li>Added database creation/schema examples used to explain JPA schema generation.</li>
+<li>The examples were later used as background for moving schema ownership to Flyway.</li>
+</ul>
+<h3><code>76-flyway-deps</code></h3>
+<ul>
+<li>Added Spring Boot Flyway support and the MySQL Flyway database module.</li>
+<li>Flyway was present but not yet enabled for the active application flow.</li>
+</ul>
+<h3><code>77-flyway-intit-script</code></h3>
+<ul>
+<li>Enabled Flyway for the <code>localmysql</code> profile.</li>
+<li>Added the V1 migration that creates the beer and customer tables.</li>
+<li>Changed Hibernate schema handling to validation so Hibernate checks the schema instead of creating it.</li>
+<li>Flyway created <code>flyway_schema_history</code> and recorded migration version 1.</li>
+<li>A non-empty existing MariaDB schema initially prevented Flyway from establishing history; the demo tables and history table were removed before rerunning the migration.</li>
+</ul>
+<h3><code>78-fly-add-column</code></h3>
+<ul>
+<li><p>Added <code>Customer.email</code> to the JPA entity.</p>
+</li>
+<li><p>Added <code>V2__add-email-to-customer.sql</code>:</p>
+<pre><code class="language-sql">alter table customer
+add column email varchar(255);
+</code></pre>
+</li>
+<li><p>On startup, Flyway validated V1 and applied V2 successfully.</p>
+</li>
+<li><p>The current customer DTO does not expose <code>email</code>, so the column is queried by Hibernate but is not returned by the customer REST response.</p>
+</li>
+</ul>
+<h2>CSV branches</h2>
+<h3><code>79-beer-csv-data</code></h3>
+<ul>
+<li>Updated the Spring Boot parent version from <code>4.0.0</code> to <code>4.0.6</code>.</li>
+<li>Removed a duplicate README course link.</li>
+<li>No new Java source was introduced on this branch.</li>
+</ul>
+<h3><code>80-beer-csv-pojo</code></h3>
+<ul>
+<li>Added <code>BeerCSVRecord</code>, a Lombok CSV row model with fields for row number, beer metadata, brewery information, location, and label.</li>
+<li>Updated the CSV header from an unnamed first column to <code>row</code>.</li>
+<li>The POJO was not yet connected to a parser or REST endpoint.</li>
+</ul>
+<h3><code>81-mapping-with-OpenCSV</code></h3>
+<ul>
+<li>Added the OpenCSV <code>5.12.0</code> dependency.</li>
+<li>Added <code>@CsvBindByName</code> mappings to <code>BeerCSVRecord</code>.</li>
+<li>Added explicit mappings for headers that differ from Java field names:<ul>
+<li><code>count.x</code> to <code>count</code></li>
+<li><code>brewery_id</code> to <code>breweryId</code></li>
+<li><code>count.y</code> to <code>count_y</code></li>
+</ul>
+</li>
+</ul>
+<h3><code>82-beer-csv-parse-service</code></h3>
+<ul>
+<li>Added <code>BeerCsvService</code> with a <code>convertCSV(File)</code> contract.</li>
+<li>Added <code>BeerCsvServiceImpl</code> using OpenCSV&#39;s <code>CsvToBeanBuilder</code>.</li>
+<li>Updated <code>BootstrapData</code> to load <code>classpath:csvdata/beers.csv</code> when fewer than 10 beers exist.</li>
+<li>Added CSV-to-<code>Beer</code> conversion, including beer-style mapping, name abbreviation, row-number UPCs, price <code>10</code>, and CSV inventory counts.</li>
+<li>Added service/bootstrap tests.</li>
+<li>Running this branch imported approximately 2,400 CSV beers into MariaDB.</li>
+</ul>
+<h3><code>83-beer-csv-save-to-db</code></h3>
+<ul>
+<li>The checked-out branch pointed to the same commit as branch 82 in this repository state.</li>
+<li>No additional diff was present.</li>
+<li>The inherited CSV bootstrap persistence behavior remained active.</li>
+</ul>
+<h3><code>84-hibernate-create-update-timestamp</code></h3>
+<ul>
+<li>Added Hibernate <code>@CreationTimestamp</code> to <code>Beer.createdDate</code>.</li>
+<li>Added Hibernate <code>@UpdateTimestamp</code> to <code>Beer.updateDate</code>.</li>
+<li>New beers received timestamps during insert, and updates refreshed <code>updateDate</code> automatically.</li>
+</ul>
+<h3><code>85-beer-csv-fix-integration-tests</code></h3>
+<ul>
+<li>Imported <code>BeerCsvServiceImpl</code> into <code>BootstrapDataTest</code> so the CSV service dependency exists in the JPA test context.</li>
+<li>Updated expected beer counts from 3 to 2413 after CSV bootstrap loading.</li>
+<li>Updated the controller integration test to expect 2413 beers.</li>
+</ul>
+<h2>Query branches</h2>
+<h3><code>86-query-test</code></h3>
+<ul>
+<li>Added a MockMvc test for <code>GET /api/v1/beer?beerName=IPA</code>.</li>
+<li>The test expected exactly 100 results.</li>
+<li>At this stage the production controller ignored the query parameter and returned the full beer dataset.</li>
+</ul>
+<h3><code>87-query-add-query-param</code></h3>
+<ul>
+<li><p>Changed <code>BeerController.listBeers</code> to accept:</p>
+<pre><code class="language-java">@RequestParam(required = false) String beerName
+</code></pre>
+</li>
+<li><p>The parameter was accepted but not passed to the service yet.</p>
+</li>
+<li><p>Live curl testing still returned the complete dataset.</p>
+</li>
+</ul>
+<h3><code>88-query-refactor-service</code></h3>
+<ul>
+<li>Changed <code>BeerService.listBeers()</code> to <code>listBeers(String beerName)</code>.</li>
+<li>Updated <code>BeerController</code> to pass <code>beerName</code> into the service.</li>
+<li>Updated both <code>BeerServiceImpl</code> and <code>BeerServiceJPA</code> signatures.</li>
+<li>Updated unit/controller tests to pass either a name or <code>null</code>.</li>
+<li>Neither service implementation filtered results yet, so the live endpoint still returned all beers.</li>
+</ul>
+<h3><code>89-query-list-by-name</code></h3>
+<ul>
+<li><p>Added the Spring Data repository method:</p>
+<pre><code class="language-java">List&lt;Beer&gt; findAllByBeerNameIsLikeIgnoreCase(String beerName);
+</code></pre>
+</li>
+<li><p>Added a repository test expecting 336 matches for <code>%IPA%</code>.</p>
+</li>
+<li><p>Added <code>BeerServiceJPA.listBeersByName(String)</code> as the intended service seam.</p>
+</li>
+<li><p>In the inspected source, <code>listBeersByName</code> still returned an empty list rather than calling the repository method, so the complete filtering behavior was not finished in this branch.</p>
+</li>
+</ul>
+<h3><code>90-query-spring-data-jpa</code></h3>
+<ul>
+<li><p>The branch name suggests the next Spring Data JPA query step, but in the repository state used during this session it pointed to the same commit as <code>89-query-list-by-name</code>.</p>
+</li>
+<li><p><code>git diff 89-query-list-by-name..90-query-spring-data-jpa</code> was empty.</p>
+</li>
+<li><p>The effective query code therefore remained:</p>
+<pre><code class="language-java">List&lt;Beer&gt; listBeersByName(String beerName) {
+    return new ArrayList&lt;&gt;();
+}
+</code></pre>
+</li>
+<li><p>The repository method was present:</p>
+<pre><code class="language-java">List&lt;Beer&gt; findAllByBeerNameIsLikeIgnoreCase(String beerName);
+</code></pre>
+</li>
+<li><p>It was not called by the service method, so the database query was not actually executed for the REST request.</p>
+</li>
+</ul>
+<h4>Branch 90 runtime evidence</h4>
+<p>The application was started with the local MariaDB profile and Docker Compose disabled:</p>
+<pre><code class="language-bash">mvn spring-boot:run \
+  -Dspring-boot.run.profiles=localmysql \
+  -Dspring-boot.run.jvmArguments=&#39;-Dspring.docker.compose.enabled=false&#39;
+</code></pre>
+<p>Startup completed with Spring Boot 4.0.6, Hikari pool <code>RestDB-Pool</code>, Flyway schema version 2, and Tomcat on port 8080. The query request produced an empty result because the service stub returned an empty list:</p>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=IPA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Content-Length: 2
+
+[]
+</code></pre>
+<p>The other REST checks remained successful:</p>
+<pre><code class="language-bash">curl -i http://127.0.0.1:8080/api/v1/customer
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Content-Length: 490
+
+[{&quot;name&quot;:&quot;Customer 1&quot;,&quot;version&quot;:1},{&quot;name&quot;:&quot;Customer 2&quot;,&quot;version&quot;:1},{&quot;name&quot;:&quot;Customer 3&quot;,&quot;version&quot;:1}]
+</code></pre>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;Branch 90 IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;upc&quot;:&quot;900000001&quot;,&quot;price&quot;:8.90,&quot;quantityOnHand&quot;:20}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 201
+Location: /api/v1/beer/b412b82c-77b8-4ce2-ba1f-8ec397e9b903
+Content-Length: 0
+</code></pre>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;&quot;,&quot;beerStyle&quot;:null,&quot;upc&quot;:&quot;&quot;,&quot;price&quot;:0,&quot;quantityOnHand&quot;:0}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 400
+Content-Type: application/json
+
+[{&quot;beerName&quot;:&quot;must not be blank&quot;},{&quot;beerStyle&quot;:&quot;must not be null&quot;},{&quot;upc&quot;:&quot;must not be blank&quot;}]
+</code></pre>
+<p>The branch demonstrates the difference between adding a repository method and wiring that method into the service. The repository declaration is ready, but the service implementation still needs to call it with a wildcard such as <code>%IPA%</code> for a contains-style case-insensitive search.</p>
+<h2>Runtime workarounds used</h2>
+<ul>
+<li><p>Local Maven executable: <code>/data/data/com.termux/files/usr/bin/mvn</code>.</p>
+</li>
+<li><p>MariaDB was started directly because the Termux service wrapper expected an unavailable OS <code>mysql</code> user.</p>
+</li>
+<li><p>Spring Boot Docker Compose auto-start was disabled because Docker is unavailable:</p>
+<pre><code class="language-bash">mvn spring-boot:run \
+  -Dspring-boot.run.profiles=localmysql \
+  -Dspring-boot.run.jvmArguments=&#39;-Dspring.docker.compose.enabled=false&#39;
+</code></pre>
+</li>
+<li><p>MariaDB 12.3 produced a Flyway warning because the installed Flyway version was verified through MariaDB 11.7.</p>
+</li>
+<li><p>Hibernate emitted an <code>Unknown column &#39;RESERVED&#39;</code> metadata warning against MariaDB, but schema validation and application startup completed successfully.</p>
+</li>
+<li><p>The MariaDB server and Spring Boot process were stopped after each run, and ports 3306 and 8080 were verified as released.</p>
+</li>
+</ul>
+<h2>Branch 96: refactor Spring Data methods for paging</h2>
+<h3><code>96-refactor-spring-data-methods</code></h3>
+<p>Branch created from <code>origin/96-refactor-spring-data-methods</code>. This branch completes the paging feature that branch 95 stubbed: the <code>PageRequest</code> created in <code>buildPageRequest()</code> is now threaded through the repository layer to actually limit results.</p>
+<h4>Changes</h4>
+<p><strong>Repository layer (<code>BeerRepository.java</code>)</strong> — All three query methods changed from <code>List&lt;Beer&gt;</code> to <code>Page&lt;Beer&gt;</code> and accept a <code>Pageable</code> parameter:</p>
+<pre><code class="language-java">Page&lt;Beer&gt; findAllByBeerNameIsLikeIgnoreCase(String beerName, Pageable pageable);
+Page&lt;Beer&gt; findAllByBeerStyle(BeerStyle beerStyle, Pageable pageable);
+Page&lt;Beer&gt; findAllByBeerNameIsLikeIgnoreCaseAndBeerStyle(String beerName, BeerStyle beerStyle, Pageable pageable);
+</code></pre>
+<p><strong>Service interface (<code>BeerService.java</code>)</strong> — Return type changed from <code>List&lt;BeerDTO&gt;</code> to <code>Page&lt;BeerDTO&gt;</code>.</p>
+<p><strong>JPA service (<code>BeerServiceJPA.java</code>)</strong> — Key changes:</p>
+<ul>
+<li><code>listBeers()</code> passes the <code>PageRequest</code> (built from <code>buildPageRequest()</code>) to all repository methods instead of the earlier <code>List</code>-returning stubs.</li>
+<li>Helper methods <code>listBeersByName</code>, <code>listBeersByStyle</code>, <code>listBeersByNameAndStyle</code> now accept and forward <code>Pageable</code>.</li>
+<li><code>findAll()</code> (the no-filter case) now calls <code>beerRepository.findAll(pageRequest)</code> instead of <code>beerRepository.findAll()</code>.</li>
+<li>The return is now <code>beerPage.map(beerMapper::beerToBeerDto)</code> — a single <code>Page.map()</code> call instead of <code>stream().map().collect()</code>. This preserves the <code>Page</code> metadata (total elements, total pages, etc.).</li>
+<li>Removed <code>import java.util.List</code> and <code>java.util.stream.Collectors</code> in favor of <code>Page</code> / <code>Pageable</code> imports.</li>
+</ul>
+<p><strong>In-memory service (<code>BeerServiceImpl.java</code>)</strong> — <code>listBeers()</code> now returns <code>PageImpl&lt;&gt;(new ArrayList&lt;&gt;(beerMap.values()))</code> to satisfy the new <code>Page&lt;BeerDTO&gt;</code> contract. This is a thin wrapper — the in-memory impl does not filter or paginate; it just wraps the full list in a <code>Page</code>.</p>
+<p><strong>Controller (<code>BeerController.java</code>)</strong> — <code>listBeers()</code> return type changed from <code>List&lt;BeerDTO&gt;</code> to <code>Page&lt;BeerDTO&gt;</code>, added <code>import org.springframework.data.domain.Page</code>. The <code>@RequestParam</code> parameters (<code>pageNumber</code>, <code>pageSize</code>) are unchanged from branch 95; they just now have an effect.</p>
+<h4>JSON response shape</h4>
+<p>Because the controller now returns Spring Data <code>Page&lt;T&gt;</code> directly, the JSON response structure changed:</p>
+<p><strong>Before (List):</strong></p>
+<pre><code class="language-json">[{&quot;beerName&quot;: &quot;...&quot;, ...}, {&quot;beerName&quot;: &quot;...&quot;, ...}]
+</code></pre>
+<p><strong>After (Page):</strong></p>
+<pre><code class="language-json">{
+  &quot;content&quot;: [{&quot;beerName&quot;: &quot;...&quot;, ...}, {&quot;beerName&quot;: &quot;...&quot;, ...}],
+  &quot;pageable&quot;: {&quot;pageNumber&quot;: 0, &quot;pageSize&quot;: 25, ...},
+  &quot;totalPages&quot;: 97,
+  &quot;totalElements&quot;: 2428,
+  &quot;last&quot;: false,
+  &quot;first&quot;: true,
+  &quot;numberOfElements&quot;: 25,
+  ...
+}
+</code></pre>
+<p>This means clients must now look at <code>$.content</code> for the actual beer array rather than <code>$.</code> directly. Spring logged a warning: <em>&quot;Serializing PageImpl instances as-is is not supported... use Spring Data&#39;s PagedModel&quot;</em> — this is a known limitation of returning <code>Page</code> directly from a REST controller without <code>PageableHandlerInterceptor</code> / <code>PagedResourcesAssembler</code>.</p>
+<h4>Tests</h4>
+<p>All test files were updated to match the <code>Page</code>-returning API:</p>
+<ul>
+<li><strong><code>BeerControllerIT</code></strong> — Changed all <code>$.size()</code> assertions to <code>$.content.size()</code> and <code>$.[0]</code> to <code>$.content[0]</code>. Added <code>.queryParam(&quot;pageSize&quot;, &quot;800&quot;)</code> to most integration test queries so they get the full result set instead of a 25-record default page. <code>testListBeers</code> now expects <code>getContent().size()</code> of 1000 (the <code>buildPageRequest</code> ceiling) when requesting page size 2413.</li>
+<li><strong><code>BeerControllerTest</code></strong> — Changed all <code>beerServiceImpl.listBeers(...)</code> return handling from <code>.get(0)</code> to <code>.getContent().get(0)</code> since the return is now a <code>Page</code>. Mock returns updated to <code>Page</code>.</li>
+<li><strong><code>BeerRepositoryTest</code></strong> — Changed <code>List&lt;Beer&gt;</code> to <code>Page&lt;Beer&gt;</code>, <code>findAllByBeerNameIsLikeIgnoreCase(&quot;%IPA%&quot;)</code> now requires a <code>Pageable</code> argument (passed <code>null</code> which uses Spring Data&#39;s default unpaged request), and <code>.size()</code> to <code>.getContent().size()</code>.</li>
+</ul>
+<h4>Test results</h4>
+<ul>
+<li><code>BeerControllerIT</code>: <strong>16 tests, 0 failures</strong> ✅</li>
+<li><code>BeerRepositoryTest</code>: <strong>3 tests, 0 failures</strong> ✅</li>
+<li><code>BeerControllerTest</code> / <code>CustomerControllerTest</code>: <strong>16 errors</strong> — all caused by a pre-existing Mockito/ByteBuddy self-attach failure on JDK 25 in this Termux environment (<code>Could not initialize plugin: interface org.mockito.plugins.MockMaker</code>). This is unrelated to the paging changes — the <code>@WebMvcTest</code> tests use Mockito <code>@MockBean</code> which requires the inline mock maker agent that won&#39;t self-attach here.</li>
+</ul>
+<h4>Edge cases noted</h4>
+<ol>
+<li><strong><code>pageSize</code> ceiling of 1000</strong>: <code>buildPageRequest</code> clamps any <code>pageSize &gt; 1000</code> to 1000. <code>testListBeers</code> confirms this by requesting <code>pageSize=2413</code> and getting 1000 back.</li>
+<li><strong><code>pageSize</code> of 0 or negative</strong>: Not clamped — would reach <code>PageRequest.of()</code> and throw <code>IllegalArgumentException</code>, surfacing as a 500. This was flagged as a known issue in branch 95 and remains unaddressed.</li>
+</ol>
+<h2>Branch 97: paging add sort</h2>
+<h3><code>97-paging-add-sort</code></h3>
+<p>Branch created from <code>origin/97-paging-add-sort</code>. Small, focused change: <strong>one file, +4/−1 lines</strong> — <code>BeerServiceJPA.java</code>. It adds ascending sort-by-name to every paginated beer query.</p>
+<h4>Change</h4>
+<p>Added <code>import org.springframework.data.domain.Sort;</code> and a sort clause inside <code>buildPageRequest()</code>:</p>
+<pre><code class="language-java">Sort sort = Sort.by(Sort.Order.asc(&quot;beerName&quot;));
+
+return PageRequest.of(queryPageNumber, queryPageSize, sort);
+</code></pre>
+<h4>Why</h4>
+<ul>
+<li>Branch 96 wired <code>PageRequest</code> into the queries, but <code>PageRequest.of(page, size)</code> carries no ordering. SQL <code>LIMIT/OFFSET</code> without <code>ORDER BY</code> has no guaranteed row order, so paged results could be arbitrary and even inconsistent between requests — the same page number could show different rows on separate calls.</li>
+<li><code>Sort.by(Sort.Order.asc(&quot;beerName&quot;))</code> sorts by the entity&#39;s <code>beerName</code> property, which JPA maps to the <code>beer_name</code> column. <code>Sort.Order.asc(...)</code> sets direction; <code>Sort.by(...)</code> accepts multiple orders, so additional keys can be chained later (e.g. <code>Sort.by(asc(&quot;beerName&quot;), desc(&quot;price&quot;))</code>).</li>
+<li>Because the sort lives in <code>buildPageRequest()</code>, all four query paths — name, style, name+style, and the no-filter <code>findAll</code> — inherit it with no controller or repository change.</li>
+</ul>
+<h4>Runtime evidence</h4>
+<p>Started with the <code>localmysql</code> profile (MariaDB, <code>restdb</code>, 2429 beers):</p>
+<pre><code class="language-bash">mvn spring-boot:run -Dspring-boot.run.profiles=localmysql
+</code></pre>
+<p>Hibernate confirmed the generated ordering:</p>
+<pre><code class="language-text">order by
+    b1_0.beer_name 
+limit
+    ?, ?
+</code></pre>
+<p>Page 1 (<code>pageNumber=1&amp;pageSize=5</code>) began at <code>#001 Golden Amber Lager</code>, <code>#002 American I.P.A.</code>, ...; page 2 continued at <code>#9</code>, <code>077XX</code>, <code>10 Degrees of Separation</code>, ... — a clean alphabetical progression confirming the sort spans pages.</p>
+<p>Page metadata from the <code>Page</code> JSON:</p>
+<pre><code class="language-text">totalElements: 2429
+totalPages:    486
+size:          5
+sort:          {empty: false, sorted: true, unsorted: false}
+</code></pre>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=2&amp;pageSize=5&quot;
+</code></pre>
+<h4>Notes</h4>
+<ul>
+<li>The sort key <code>beerName</code> is the Java property name, not the column name; Spring Data resolves it against the entity metamodel.</li>
+<li>A deterministic sort is a prerequisite for correct paging. Without it, clients could see duplicate or missing records as they walk through pages.</li>
+</ul>
+<h2>Branch 98: add order and order-line tables</h2>
+<h3><code>98-rel-add-order-order-detail</code></h3>
+<p>Branch created from <code>origin/98-rel-add-order-order-detail</code>. <strong>No Java changes at all</strong> — the only addition is a new manual DDL script, <code>src/scripts/add-order-tables.sql</code> (29 lines). It is a preparatory branch for the JPA relationship mapping work that follows in later branches (99+).</p>
+<h4>The script</h4>
+<pre><code class="language-sql">drop table if exists beer_order_line;
+drop table if exists beer_order;
+
+CREATE TABLE `beer_order`
+(
+    id                 varchar(36) NOT NULL,
+    created_date       datetime(6)  DEFAULT NULL,
+    customer_ref       varchar(255) DEFAULT NULL,
+    last_modified_date datetime(6)  DEFAULT NULL,
+    version            bigint       DEFAULT NULL,
+    customer_id        varchar(36)  DEFAULT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT FOREIGN KEY (customer_id) REFERENCES customer (id)
+) ENGINE = InnoDB;
+
+CREATE TABLE `beer_order_line`
+(
+    id                 varchar(36) NOT NULL,
+    beer_id            varchar(36) DEFAULT NULL,
+    created_date       datetime(6) DEFAULT NULL,
+    last_modified_date datetime(6) DEFAULT NULL,
+    order_quantity     int         DEFAULT NULL,
+    quantity_allocated int         DEFAULT NULL,
+    version            bigint      DEFAULT NULL,
+    beer_order_id      varchar(36) DEFAULT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT FOREIGN KEY (beer_order_id) REFERENCES beer_order (id),
+    CONSTRAINT FOREIGN KEY (beer_id) REFERENCES beer (id)
+) ENGINE = InnoDB;
+</code></pre>
+<h4>Key points</h4>
+<ul>
+<li><strong>Not a Flyway migration.</strong> The file lives in <code>src/scripts/</code>, not <code>src/main/resources/db/migration/</code>, and is not named <code>V*__*.sql</code>, so Flyway never sees it. It is a developer-run reference script — the schema is applied by hand, not on application startup. This is consistent with how earlier branches (e.g. <code>75-db-create-scripts</code>) introduced schema examples.</li>
+<li><strong>Drop order respects FK dependencies.</strong> <code>beer_order_line</code> is dropped before <code>beer_order</code> because it references <code>beer_order</code>. Dropping in the reverse order would fail on the FK constraint.</li>
+<li><strong>Two-level ordering model.</strong> <code>beer_order</code> (header) → <code>beer_order_line</code> (details), a one-to-many. The line table also references <code>beer</code>, so lines point at the products being ordered.</li>
+<li><strong>FK relationships created:</strong><ul>
+<li><code>beer_order.customer_id</code> → <code>customer.id</code></li>
+<li><code>beer_order_line.beer_order_id</code> → <code>beer_order.id</code></li>
+<li><code>beer_order_line.beer_id</code> → <code>beer.id</code></li>
+</ul>
+</li>
+<li><strong><code>version bigint</code></strong> on both tables holds the optimistic-locking column (note: <code>bigint</code> here, whereas the <code>beer</code>/<code>customer</code> tables use <code>integer</code> — the later entity mappings settle on <code>Integer</code>).</li>
+<li><strong>Audit timestamps.</strong> <code>created_date</code> and <code>last_modified_date</code> mirror the <code>createdDate</code> / <code>updateDate</code> pattern on the existing entities. The name <code>last_modified_date</code> differs from the existing <code>update_date</code>, so the Order entity mapping will need an explicit <code>@Column</code> mapping.</li>
+<li><strong><code>customer_ref</code></strong> is a plain <code>varchar(255)</code> denormalized copy of the customer identity, separate from the <code>customer_id</code> FK. This appears in later order-DTO work as a human-readable reference.</li>
+</ul>
+<h4>Empirical evidence</h4>
+<p>MariaDB (restdb) before applying the script contained only <code>beer</code>, <code>customer</code>, <code>flyway_schema_history</code>. After running the script by hand:</p>
+<pre><code class="language-bash">mysql -u restadmin -ppassword restdb &lt; src/scripts/add-order-tables.sql
+</code></pre>
+<p>Tables present: <code>beer</code>, <code>beer_order</code>, <code>beer_order_line</code>, <code>customer</code>, <code>flyway_schema_history</code>.</p>
+<p>FK constraints reported by <code>information_schema.KEY_COLUMN_USAGE</code>:</p>
+<table>
+<thead>
+<tr>
+<th>TABLE_NAME</th>
+<th>COLUMN_NAME</th>
+<th>REFERENCED_TABLE</th>
+<th>REFERENCED_COLUMN</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>beer_order</td>
+<td>customer_id</td>
+<td>customer</td>
+<td>id</td>
+</tr>
+<tr>
+<td>beer_order_line</td>
+<td>beer_order_id</td>
+<td>beer_order</td>
+<td>id</td>
+</tr>
+<tr>
+<td>beer_order_line</td>
+<td>beer_id</td>
+<td>beer</td>
+<td>id</td>
+</tr>
+</tbody></table>
+<h4>Runtime behavior is unchanged</h4>
+<p>The application was started with the <code>localmysql</code> profile. Startup showed <code>Successfully validated 2 migrations</code> and <code>Schema \</code>restdb` is up to date. No migration necessary.<code> — Flyway ignores the new script entirely. Spring Data reported **2 JPA repository interfaces** (</code>BeerRepository<code>, </code>CustomerRepository<code>), unchanged from branch 97, because no </code>BeerOrder<code>/</code>BeerOrderLine` entities or repositories exist yet.</p>
+<p><code>ddl-auto=validate</code> did not complain about the two new tables: Hibernate validates that mapped entities match the schema, and does not object to extra tables it has no mapping for. The REST API behaved exactly as on branch 97:</p>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=1&amp;pageSize=3&quot;
+</code></pre>
+<pre><code class="language-text">totalElements: 2429
+first three (name-sorted): #001 Golden Amber Lager, #002 American I.P.A., #003 Brown &amp; Robust Porter
+</code></pre>
+<p>This branch is schema-only groundwork: the tables and foreign keys exist so that the next branches can add the JPA entities, repositories, and mappings that use them.</p>
+<h2>Branch 99: order tables as a Flyway migration</h2>
+<h3><code>99-rel-add-order-order-detail</code></h3>
+<p>Branch created from <code>origin/99-rel-add-order-order-detail</code>. Again <strong>no Java changes</strong>. This branch takes the DDL script that branch 98 added by hand and moves it into Flyway&#39;s managed migration path as <code>src/main/resources/db/migration/V3__add-order-tables.sql</code> (29 lines, byte-identical content to branch 98&#39;s <code>src/scripts/add-order-tables.sql</code>).</p>
+<h4>What changed</h4>
+<ul>
+<li>Added <code>V3__add-order-tables.sql</code> under <code>src/main/resources/db/migration/</code>, so Flyway discovers, validates, and applies it on startup.</li>
+<li>The branch-98 manual script <code>src/scripts/add-order-tables.sql</code> is <strong>still tracked</strong> — both files coexist. The <code>src/scripts/</code> copy is now redundant reference material; the Flyway copy is the one that actually shapes the database.</li>
+</ul>
+<h4>Why this matters</h4>
+<p>Branch 98&#39;s script required someone to run it manually (<code>mysql &lt; src/scripts/add-order-tables.sql</code>). Branch 99 makes the schema change automatic and versioned:</p>
+<ul>
+<li><strong>Automatic on startup.</strong> Application boot now creates the order tables without any manual step.</li>
+<li><strong>Recorded and checksummed.</strong> Flyway writes a row to <code>flyway_schema_history</code> and hashes the file, so later edits to <code>V3</code> would be detected as a checksum mismatch.</li>
+<li><strong>Ordered after V1/V2.</strong> The <code>V3</code> prefix guarantees the order tables are created only after <code>customer</code> and <code>beer</code> exist, satisfying the foreign keys.</li>
+</ul>
+<h4>The running-state detail worth noting</h4>
+<p>In the branch-98 step of this session, the order tables had already been created by hand — so before branch 99&#39;s app start, <code>beer_order</code> / <code>beer_order_line</code> physically existed but were <strong>absent from <code>flyway_schema_history</code></strong> (history was at version 2). Flyway therefore treated V3 as unapplied and ran it. Because V3 begins with:</p>
+<pre><code class="language-sql">drop table if exists beer_order_line;
+drop table if exists beer_order;
+</code></pre>
+<p>it dropped the manually created tables and recreated them under Flyway&#39;s ownership. This is why the migration is safe to run against a database where the tables already exist, but also why embedding <code>drop table</code> in a versioned migration is unusual for production use — it is destructive if any data were present. Here the tables were empty, so nothing was lost.</p>
+<h4>Empirical evidence</h4>
+<p>Startup with the <code>localmysql</code> profile:</p>
+<pre><code class="language-text">Successfully validated 3 migrations (execution time 00:00.115s)
+Migrating schema `restdb` to version &quot;3 - add-order-tables&quot;
+Successfully applied 1 migration to schema `restdb`, now at version v3 (execution time 00:00.108s)
+Started Spring7RestMvcApplication in 21.278 seconds
+</code></pre>
+<p><code>flyway_schema_history</code> after the run:</p>
+<table>
+<thead>
+<tr>
+<th>version</th>
+<th>description</th>
+<th>success</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>init-mysql-database</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>add-email-to-customer</td>
+<td>1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>add-order-tables</td>
+<td>1</td>
+</tr>
+</tbody></table>
+<p>Tables present: <code>beer</code>, <code>beer_order</code>, <code>beer_order_line</code>, <code>customer</code>, <code>flyway_schema_history</code>.</p>
+<p>FK constraints recreated by Flyway (re-confirmed via <code>information_schema.KEY_COLUMN_USAGE</code>):</p>
+<table>
+<thead>
+<tr>
+<th>TABLE_NAME</th>
+<th>COLUMN_NAME</th>
+<th>REFERENCED_TABLE</th>
+<th>REFERENCED_COLUMN</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>beer_order</td>
+<td>customer_id</td>
+<td>customer</td>
+<td>id</td>
+</tr>
+<tr>
+<td>beer_order_line</td>
+<td>beer_order_id</td>
+<td>beer_order</td>
+<td>id</td>
+</tr>
+<tr>
+<td>beer_order_line</td>
+<td>beer_id</td>
+<td>beer</td>
+<td>id</td>
+</tr>
+</tbody></table>
+<p>Spring Data still reports <strong>2 JPA repository interfaces</strong> — no Order entities or repositories yet, so the REST API is unchanged from branches 97/98:</p>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=1&amp;pageSize=2&quot;
+</code></pre>
+<pre><code class="language-text">totalElements: 2429
+first two (name-sorted): #001 Golden Amber Lager, #002 American I.P.A.
+</code></pre>
+<p>This is the same schema as branch 98, but now owned and versioned by Flyway rather than applied by hand. The JPA entity/repository work for orders remains in the following branches.</p>
+<h2>Branch 100: order entities and the customer one-to-many</h2>
+<h3><code>100-rel-one-to-many</code></h3>
+<p>Branch created from <code>origin/100-rel-one-to-many</code>. First branch with <strong>real Java changes since 97</strong>: three files, +110 lines.</p>
+<ul>
+<li><code>entities/BeerOrder.java</code> (new, 61 lines)</li>
+<li><code>entities/BeerOrderLine.java</code> (new, 45 lines)</li>
+<li><code>entities/Customer.java</code> (+4: import <code>java.util.Set</code>, <code>@OneToMany</code> field)</li>
+</ul>
+<p>No repositories, DTOs, mappers, or controllers were added, so the entities are not yet reachable through the REST API. Spring Data still reports <strong>2 JPA repository interfaces</strong>.</p>
+<h4><code>BeerOrder</code> entity</h4>
+<pre><code class="language-java">@Getter @Setter @Entity @NoArgsConstructor @AllArgsConstructor @Builder
+public class BeerOrder {
+
+    @Id
+    @GeneratedValue(generator = &quot;UUID&quot;)
+    @UuidGenerator
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(length = 36, columnDefinition = &quot;varchar(36)&quot;, updatable = false, nullable = false )
+    private UUID id;
+
+    @Version
+    private Long version;
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private Timestamp createdDate;
+
+    @UpdateTimestamp
+    private Timestamp lastModifiedDate;
+
+    public boolean isNew() {
+        return this.id == null;
+    }
+
+    private String customerRef;
+
+    @ManyToOne
+    private Customer customer;
+}
+</code></pre>
+<ul>
+<li>Same UUID strategy as <code>Beer</code>/<code>Customer</code>: <code>@UuidGenerator</code> + <code>@JdbcTypeCode(SqlTypes.CHAR)</code> so the UUID binds as a 36-char string matching the <code>varchar(36)</code> column.</li>
+<li><code>@Version private Long version</code> — note <strong><code>Long</code>, not <code>Integer</code></strong>, matching the <code>bigint</code> column in <code>V3</code>. This differs from <code>Beer</code>/<code>Customer</code>, which use <code>Integer</code>/<code>integer</code>.</li>
+<li><code>@CreationTimestamp</code> on <code>createdDate</code> with <code>@Column(updatable = false)</code> — the column is written once on insert and never updated.</li>
+<li><code>@UpdateTimestamp</code> on <code>lastModifiedDate</code> — refreshed on every update. Note the field/property name <code>lastModifiedDate</code> (maps to <code>last_modified_date</code>), different from the existing entities&#39; <code>updateDate</code> (<code>update_date</code>). No explicit <code>@Column</code> name is needed because the implicit naming strategy converts camelCase to snake_case and matches the DDL.</li>
+<li><code>isNew()</code> returns <code>this.id == null</code>. This is a common JPA idiom used later by service code to decide <code>persist</code> (new) versus <code>merge</code> (existing); it exists here but no caller uses it yet.</li>
+<li><code>customerRef</code> — a plain string column (<code>customer_ref</code>), the denormalized reference that <code>V3</code> created.</li>
+<li><code>@ManyToOne private Customer customer;</code> — the <strong>owning side</strong> of the Customer↔BeerOrder relationship. With no <code>@JoinColumn</code>, JPA&#39;s default join column is <code>customer_&lt;pk&gt;</code> → <code>customer_id</code>, which matches the <code>V3</code> FK <code>beer_order.customer_id → customer.id</code>. Fetch type defaults to <code>EAGER</code> for <code>@ManyToOne</code> (a point that often gets revisited later).</li>
+</ul>
+<h4><code>BeerOrderLine</code> entity</h4>
+<pre><code class="language-java">@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Entity @Builder
+public class BeerOrderLine {
+
+    @Id @GeneratedValue(generator = &quot;UUID&quot;) @UuidGenerator
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(length = 36, columnDefinition = &quot;varchar(36)&quot;, updatable = false, nullable = false )
+    private UUID id;
+
+    @Version
+    private Long version;
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private Timestamp createdDate;
+
+    @UpdateTimestamp
+    private Timestamp lastModifiedDate;
+
+    public boolean isNew() {
+        return this.id == null;
+    }
+
+    private Integer orderQuantity = 0;
+    private Integer quantityAllocated = 0;
+}
+</code></pre>
+<ul>
+<li>Same UUID/version/timestamp/isNew pattern as <code>BeerOrder</code>.</li>
+<li><code>orderQuantity</code> and <code>quantityAllocated</code> are initialized to <code>0</code>, so a newly built line defaults to zero rather than null.</li>
+<li><strong>Deliberately incomplete relationships.</strong> Although <code>V3</code> gave <code>beer_order_line</code> two foreign keys (<code>beer_order_id → beer_order.id</code> and <code>beer_id → beer.id</code>), this entity maps <strong>neither</strong>. There is no <code>@ManyToOne BeerOrder</code>, no <code>@OneToMany</code> back-reference, and no <code>@ManyToOne Beer</code>. Those two FK columns exist in the schema but are currently unmanaged by JPA. This is the visible gap that branch 101 (<code>rel-assn-one-to-many</code>) is positioned to fill.</li>
+</ul>
+<h4><code>Customer</code> change</h4>
+<pre><code class="language-java">@OneToMany(mappedBy = &quot;customer&quot;)
+private Set&lt;BeerOrder&gt; beerOrders;
+</code></pre>
+<ul>
+<li>Turns the relationship <strong>bidirectional</strong>. <code>Customer</code> is the <strong>inverse</strong> side: <code>mappedBy = &quot;customer&quot;</code> says the FK lives on the <code>BeerOrder.customer</code> field, so JPA reads the association from there and manages no column on the customer side.</li>
+<li><code>Set</code> (not <code>List</code>) is chosen to avoid duplicate-element issues and to sidestep ordering concerns; it is not initialized, so it can be null until loaded/populated.</li>
+<li>No <code>cascade</code> and no <code>orphanRemoval</code> are declared, so persisting/removing a <code>Customer</code> will not cascade to its orders. Default <code>@OneToMany</code> fetch is <code>LAZY</code>.</li>
+</ul>
+<h4>Schema validation</h4>
+<p>The entities must line up with the <code>V3</code> DDL because <code>ddl-auto=validate</code>. They do:</p>
+<table>
+<thead>
+<tr>
+<th>Entity property</th>
+<th>Column</th>
+<th>DDL type</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>BeerOrder.id</td>
+<td>id</td>
+<td>varchar(36)</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrder.version</td>
+<td>version</td>
+<td>bigint (<code>Long</code>)</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrder.createdDate</td>
+<td>created_date</td>
+<td>datetime(6)</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrder.lastModifiedDate</td>
+<td>last_modified_date</td>
+<td>datetime(6)</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrder.customerRef</td>
+<td>customer_ref</td>
+<td>varchar(255)</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrder.customer</td>
+<td>customer_id</td>
+<td>varchar(36) FK</td>
+<td>match</td>
+</tr>
+<tr>
+<td>BeerOrderLine.*</td>
+<td>id, version, created_date, last_modified_date, order_quantity, quantity_allocated</td>
+<td>—</td>
+<td>match</td>
+</tr>
+</tbody></table>
+<p>Startup completed with <strong>zero <code>Schema-validation</code> errors</strong> — Hibernate accepted every mapping. The unmapped <code>beer_id</code> / <code>beer_order_id</code> columns do not cause validation failures, since validation checks that mapped things exist in the schema, not that every column is mapped.</p>
+<h4>Empirical evidence</h4>
+<p>MariaDB had to be restarted (the server had stopped after the branch-99 run). Flyway reported the schema already at v3:</p>
+<pre><code class="language-text">Schema `restdb` is up to date. No migration necessary.
+</code></pre>
+<p>Application startup:</p>
+<pre><code class="language-text">Found 2 JPA repository interfaces.
+Started Spring7RestMvcApplication in 23.53 seconds
+</code></pre>
+<p>(Devtools performed a follow-up restart, logging <code>Found 0 JPA repository interfaces</code> on the restart pass — a devtools reload artifact, not a real state change; the running app continued to serve requests normally.)</p>
+<p>REST checks remained healthy and unchanged, because no order endpoints exist yet:</p>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=1&amp;pageSize=2&quot;
+</code></pre>
+<pre><code class="language-text">totalElements: 2429
+first two (name-sorted): #001 Golden Amber Lager, #002 American I.P.A.
+</code></pre>
+<pre><code class="language-bash">curl http://localhost:8080/api/v1/customer
+</code></pre>
+<pre><code class="language-text">[{&quot;createdDate&quot;:&quot;2026-09-14T16:37:55.778573&quot;,&quot;id&quot;:&quot;8a857c62-...&quot;,&quot;name&quot;:&quot;Customer 1&quot;,&quot;updateDate&quot;:&quot;...&quot;,&quot;version&quot;:1}, ...]
+</code></pre>
+<h4>Design notes / loose ends for later branches</h4>
+<ul>
+<li><strong>Customer ↔ BeerOrder is now bidirectional</strong>, owning side on <code>BeerOrder.customer</code>.</li>
+<li><strong>BeerOrderLine is an orphan entity</strong> — no relationship to <code>BeerOrder</code> or <code>Beer</code> despite the schema FKs. This is the next branch&#39;s work.</li>
+<li><strong>Type inconsistency</strong> across the codebase: <code>Long</code>/<code>Timestamp</code> on the order entities vs <code>Integer</code>/<code>LocalDateTime</code> on <code>Beer</code>/<code>Customer</code>. Not a bug, but worth noting.</li>
+<li><strong>No cascade/orphanRemoval</strong>, so order lines will not persist automatically when an order is saved — that has to be handled explicitly.</li>
+<li><strong>No mappers/DTOs/repositories/controllers</strong>, so none of this is exposed over HTTP yet.</li>
+</ul>
+<h2>Branch 101: complete the one-to-many associations</h2>
+<h3><code>101-rel-assn-one-to-many</code></h3>
+<p>Branch created from <code>origin/101-rel-assn-one-to-many</code>. Four files, +17/−2 lines. This is the branch that closes the gap left in branch 100: <code>BeerOrderLine</code>, which until now had no relationship mappings, gains both of its owning sides, and the two inverse collections are added.</p>
+<ul>
+<li><code>entities/BeerOrderLine.java</code> (+6) — the two <code>@ManyToOne</code> owning sides</li>
+<li><code>entities/BeerOrder.java</code> (+7) — inverse <code>@OneToMany</code> collection</li>
+<li><code>entities/Beer.java</code> (+4) — inverse <code>@OneToMany</code> collection</li>
+<li><code>pom.xml</code> (−2) — trailing-blank-line cleanup only (no dependency change)</li>
+</ul>
+<h4><code>BeerOrderLine</code> gains both owning sides</h4>
+<pre><code class="language-java">@ManyToOne
+private BeerOrder beerOrder;
+
+@ManyToOne
+private Beer beer;
+</code></pre>
+<p>These are the <strong>owning</strong> sides of both associations. With no <code>@JoinColumn</code>, JPA&#39;s implicit naming produces <code>beer_order_id</code> and <code>beer_id</code>, which match the two FKs that <code>V3</code> created. The columns that were unmapped since branch 100 are now managed.</p>
+<h4><code>BeerOrder</code> and <code>Beer</code> gain inverse collections</h4>
+<p>In <code>BeerOrder</code>:</p>
+<pre><code class="language-java">@OneToMany(mappedBy = &quot;beerOrder&quot;)
+private Set&lt;BeerOrderLine&gt; beerOrderLines;
+</code></pre>
+<p>In <code>Beer</code>:</p>
+<pre><code class="language-java">@OneToMany(mappedBy = &quot;beer&quot;)
+private Set&lt;BeerOrderLine&gt; beerOrderLines;
+</code></pre>
+<p>Each is the <strong>inverse</strong> side. <code>mappedBy</code> points at the field on <code>BeerOrderLine</code> that owns the FK, so these collections are read-only with respect to the join column — JPA issues no insert/update for them and derives them from the owning side.</p>
+<h4>The completed relationship graph</h4>
+<p>After this branch the object graph is fully bidirectional and every schema FK is mapped:</p>
+<table>
+<thead>
+<tr>
+<th>Association</th>
+<th>Owning side (owns FK)</th>
+<th>Inverse side (<code>mappedBy</code>)</th>
+<th>Join column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Customer ↔ BeerOrder</td>
+<td><code>BeerOrder.customer</code> <code>@ManyToOne</code></td>
+<td><code>Customer.beerOrders</code></td>
+<td><code>beer_order.customer_id</code></td>
+</tr>
+<tr>
+<td>BeerOrder ↔ BeerOrderLine</td>
+<td><code>BeerOrderLine.beerOrder</code> <code>@ManyToOne</code></td>
+<td><code>BeerOrder.beerOrderLines</code></td>
+<td><code>beer_order_line.beer_order_id</code></td>
+</tr>
+<tr>
+<td>Beer ↔ BeerOrderLine</td>
+<td><code>BeerOrderLine.beer</code> <code>@ManyToOne</code></td>
+<td><code>Beer.beerOrderLines</code></td>
+<td><code>beer_order_line.beer_id</code></td>
+</tr>
+</tbody></table>
+<p>This mirrors the <code>V3</code> DDL exactly: a two-level order model whose detail rows also point back at the product being ordered.</p>
+<h4>Design notes</h4>
+<ul>
+<li><strong>Fetch strategy is the JPA default.</strong> <code>@ManyToOne</code> is <code>EAGER</code>, <code>@OneToMany</code> is <code>LAZY</code>. So loading a single <code>BeerOrderLine</code> eagerly pulls in both its <code>BeerOrder</code> and its <code>Beer</code>, and loading a <code>BeerOrder</code> eagerly pulls in its <code>Customer</code>. With two eager <code>@ManyToOne</code> associations on the line entity, iterating a set of lines can produce N+1 query patterns. Nothing here changes the defaults; tuning would come later.</li>
+<li><strong>No <code>cascade</code>, no <code>orphanRemoval</code>.</strong> Saving a <code>BeerOrder</code> will not automatically persist its lines, and removing a line from the collection will not delete it. Persistence of the detail rows must be handled explicitly by later service code.</li>
+<li><strong>Uninitialized <code>Set</code> fields.</strong> The three collections are declared but not initialized (<code>new HashSet&lt;&gt;()</code>), so they can be null unless populated by the provider or by application code.</li>
+<li><strong><code>@JoinColumn</code> not required</strong> — implicit naming and the <code>V3</code> column names agree, so no explicit join-column annotations were necessary.</li>
+<li>Still <strong>no repositories/DTOs/mappers/controllers</strong> for orders, so the whole order model remains unreachable via REST.</li>
+</ul>
+<h4>Schema validation and runtime</h4>
+<p>Started with the <code>localmysql</code> profile. Hibernate <code>validate</code> accepted all new mappings — <strong>zero <code>Schema-validation</code> errors</strong> — confirming the implicit join-column names resolve to the real <code>V3</code> columns. Flyway reported the schema already current:</p>
+<pre><code class="language-text">Successfully validated 3 migrations
+Schema `restdb` is up to date. No migration necessary.
+</code></pre>
+<p>Spring Data still reports <strong>2 JPA repository interfaces</strong>; the REST API is unaffected:</p>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=1&amp;pageSize=2&quot;
+</code></pre>
+<pre><code class="language-text">totalElements: 2429
+first two (name-sorted): #001 Golden Amber Lager, #002 American I.P.A.
+</code></pre>
+<pre><code class="language-bash">curl http://localhost:8080/api/v1/customer
+</code></pre>
+<pre><code class="language-text">[{&quot;createdDate&quot;:&quot;2026-09-14T16:37:55.778573&quot;,&quot;id&quot;:&quot;8a857c62-...&quot;,&quot;name&quot;:&quot;Customer 1&quot;,&quot;updateDate&quot;:&quot;...&quot;,&quot;version&quot;:1}, ...]
+</code></pre>
+<p>Because no order endpoints exist yet, the new associations are not exercised by any HTTP request; the evidence here is that the mappings compile and validate against the migrated schema.</p>
+<h2>Branch 102: beer order repository</h2>
+<h3><code>102-rel-beer-order-repository</code></h3>
+<p>Branch created from <code>origin/102-rel-beer-order-repository</code>. Two new files, +51 lines: a repository interface and its first (print-style) test. No service, DTO, mapper, or controller work.</p>
+<ul>
+<li><code>repositories/BeerOrderRepository.java</code> (new, 12 lines)</li>
+<li><code>test/.../repositories/BeerOrderRepositoryTest.java</code> (new, 39 lines)</li>
+</ul>
+<h4><code>BeerOrderRepository</code></h4>
+<pre><code class="language-java">public interface BeerOrderRepository extends JpaRepository&lt;BeerOrder, UUID&gt; {
+}
+</code></pre>
+<ul>
+<li>A plain Spring Data JPA repository for the <code>BeerOrder</code> aggregate root, keyed by <code>UUID</code>. No derived query methods are declared — only the inherited <code>JpaRepository</code> CRUD plus <code>count()</code>, <code>findAll()</code>, etc.</li>
+<li>With no <code>@Repository</code> annotation needed (Spring Data supplies the proxy), the interface alone is enough for component scanning to register a bean.</li>
+<li>Note there is <strong>no</strong> <code>BeerOrderLineRepository</code>; lines are intended to be reached through the order aggregate.</li>
+</ul>
+<h4><code>BeerOrderRepositoryTest</code></h4>
+<pre><code class="language-java">@SpringBootTest
+class BeerOrderRepositoryTest {
+
+    @Autowired BeerOrderRepository beerOrderRepository;
+    @Autowired CustomerRepository customerRepository;
+    @Autowired BeerRepository beerRepository;
+
+    Customer testCustomer;
+    Beer testBeer;
+
+    @BeforeEach
+    void setUp() {
+        testCustomer = customerRepository.findAll().get(0);
+        testBeer = beerRepository.findAll().get(0);
+    }
+
+    @Test
+    void testBeerOrders() {
+        System.out.println(beerOrderRepository.count());
+        System.out.println(customerRepository.count());
+        System.out.println(beerRepository.count());
+        System.out.println(testCustomer.getName());
+        System.out.println(testBeer.getBeerName());
+    }
+}
+</code></pre>
+<ul>
+<li><strong><code>@SpringBootTest</code></strong> (full application context), not <code>@DataJpaTest</code>. That means the whole app boots, including <code>BootstrapData</code>, so the seeded data is available. It does <strong>not</strong> use Testcontainers here, so the test runs against the default in-memory H2 datasource with Hibernate creating the schema from the entity mappings.</li>
+<li><strong>No assertions.</strong> <code>testBeerOrders()</code> only prints values; it is a &quot;print-based&quot; learning test to demonstrate that the repositories wire up and can be queried. It would pass even if the values changed, so it provides no real regression protection.</li>
+<li><code>setUp()</code> uses <code>findAll().get(0)</code> to grab the first customer and first beer. This is order-dependent and would throw <code>IndexOutOfBoundsException</code> if the bootstrap data were absent.</li>
+</ul>
+<h4>Empirical evidence</h4>
+<p><strong>Runtime (<code>localmysql</code> profile, MariaDB):</strong> repository scanning now finds <strong>3 JPA repository interfaces</strong> (was 2):</p>
+<pre><code class="language-text">Finished Spring Data repository scanning in 303 ms. Found 3 JPA repository interfaces.
+Schema `restdb` is up to date. No migration necessary.
+Started Spring7RestMvcApplication in 23.282 seconds
+</code></pre>
+<p>MariaDB counts before start: 2429 beers, 0 orders. The REST API is unaffected (still no order endpoints):</p>
+<pre><code class="language-bash">curl &quot;http://localhost:8080/api/v1/beer?pageNumber=1&amp;pageSize=2&quot;
+</code></pre>
+<pre><code class="language-text">beers totalElements: 2429
+</code></pre>
+<p><strong>Test run:</strong></p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerOrderRepositoryTest
+</code></pre>
+<pre><code class="language-text">Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+</code></pre>
+<p>Printed output captured from the surefire <code>system-out</code>:</p>
+<pre><code class="language-text">0        &lt;- beerOrderRepository.count()  (H2 test DB has no orders)
+3        &lt;- customerRepository.count()
+2413     &lt;- beerRepository.count()      (3 seeded + 2410 CSV beers)
+Customer 1   &lt;- testCustomer.getName()
+Galaxy Cat   &lt;- testBeer.getBeerName()
+</code></pre>
+<p>This confirms the new repository bean is wired, the aggregate can be counted, and the existing customer/beer repositories still resolve in the same context. The orders count of 0 reflects that nothing has been persisted to <code>beer_order</code> yet — and in the H2 test database the order tables exist only because Hibernate generated them from the entity graph, since Flyway is disabled in the default profile.</p>
+<h4>Position in the series</h4>
+<p>This is the first branch that touches the order aggregate from the persistence layer. It is a stepping stone: the repository exists and is proven to wire up, but there is still no service, no DTO/mapper, and no controller, so orders remain unreachable over HTTP. The next branches are expected to build the order service and API on top of this repository.</p>
+<h2>Branch 103: persisting relationships</h2>
+<h3><code>103-rel-persisting-relationships</code></h3>
+<p>Branch created from <code>origin/103-rel-persisting-relationships</code>. <strong>Only one file changed</strong> — <code>BeerOrderRepositoryTest.java</code>, +24/−6. No production code. The branch converts the branch-102 print-only test into one that actually <strong>persists</strong> a <code>BeerOrder</code> that references a <code>Customer</code>.</p>
+<h4>The new test</h4>
+<pre><code class="language-java">@Transactional
+@Test
+void testBeerOrders() {
+    BeerOrder beerOrder = BeerOrder.builder()
+            .customerRef(&quot;Test order&quot;)
+            .customer(testCustomer)
+            .build();
+
+    BeerOrder savedBeerOrder = beerOrderRepository.saveAndFlush(beerOrder);
+
+    System.out.println(savedBeerOrder.getCustomerRef());
+}
+</code></pre>
+<h4>The logic, line by line</h4>
+<ul>
+<li><strong><code>@Transactional</code> on the test method</strong> is the crucial addition. Spring&#39;s test framework wraps a <code>@Transactional</code> test in a transaction and <strong>rolls it back automatically</strong> when the method ends. So the insert is real and observed by the code inside the test, but it never survives the test. This is why the branch can persist orders without polluting the database and without needing cleanup code.</li>
+<li><strong><code>.customer(testCustomer)</code></strong> wires the already-loaded (first) customer into the order&#39;s <code>@ManyToOne</code>. This exercises the owning side of the Customer↔BeerOrder association — the value written to <code>beer_order.customer_id</code>.</li>
+<li><strong><code>.customerRef(&quot;Test order&quot;)</code></strong> sets the plain denormalized string column.</li>
+<li><strong><code>saveAndFlush(...)</code></strong> (rather than <code>save</code>) forces the SQL INSERT to execute immediately and returns the managed instance. That matters because the entity id is generated by Hibernate (<code>@UuidGenerator</code>), the <code>@Version</code> is assigned, and <code>@CreationTimestamp</code>/<code>@UpdateTimestamp</code> are populated — <code>saveAndFlush</code> guarantees those are realized before the next line runs. With plain <code>save</code> the insert might be deferred until flush/commit, and the returned object&#39;s generated fields could be unset at the point of use.</li>
+<li><strong><code>savedBeerOrder.getCustomerRef()</code></strong> prints the persisted value, confirming the entity round-tripped through the repository.</li>
+</ul>
+<h4>What this demonstrates about relationship persistence</h4>
+<p>The order holds a <strong>reference to an existing</strong> customer, so no cascade is involved: Hibernate only needs the customer&#39;s id to write the FK. The detached <code>testCustomer</code> loaded in <code>@BeforeEach</code> (its own transaction) is sufficient — assigning a detached entity to an owning <code>@ManyToOne</code> is fine when the row already exists. This is the pattern a future order service will use: look up the customer, attach it to the order, save the order. Nothing about <code>BeerOrderLine</code> is exercised yet, so the &quot;save an order <em>with lines</em>&quot; case (which needs cascade or explicit line saves) is still ahead.</p>
+<h4>Test nature</h4>
+<p>Still <strong>no assertions</strong> — it prints <code>savedBeerOrder.getCustomerRef()</code> and would pass as long as no exception is thrown. It is a demonstration test: it proves the mapping and repository can carry out an insert involving a relationship, not that any particular value is correct.</p>
+<h4>Empirical evidence</h4>
+<p><strong>Test run:</strong></p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerOrderRepositoryTest
+</code></pre>
+<pre><code class="language-text">Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+</code></pre>
+<p>Captured <code>system-out</code>:</p>
+<pre><code class="language-text">Test order
+</code></pre>
+<p>The printed value confirms the order was built, flushed, and read back.</p>
+<p>Because the test has no active profile, it runs on the <strong>H2</strong> test datasource (Flyway disabled, Hibernate generates the schema from the entity graph), not MariaDB. The <code>@Transactional</code> rollback means nothing persists even in H2.</p>
+<p><strong>MariaDB after the run</strong> (proving the rollback and that the test did not touch the real database):</p>
+<pre><code class="language-text">beer_order count:      0
+beer_order_line count: 0
+beers:                 2429
+</code></pre>
+<p><strong>Application runtime</strong> (<code>localmysql</code> profile) was unchanged: 3 JPA repositories, <code>Schema \</code>restdb` is up to date. No migration necessary.`, Tomcat on 8080, REST returning 2429 beers. The order API is still absent.</p>
+<h2>Branch 104: relationship helper methods</h2>
+<h3><code>104-rel-helper-methods</code></h3>
+<p>Branch created from <code>origin/104-rel-helper-methods</code>. Three files, +20/−3. This branch introduces the <strong>bidirectional-consistency helper</strong> pattern: keeping both sides of a JPA relationship in sync when only one side is assigned.</p>
+<ul>
+<li><code>entities/BeerOrder.java</code> (+17/−1) — explicit all-args constructor and a <code>setCustomer</code> helper</li>
+<li><code>entities/Customer.java</code> (+4/−1) — initialize the inverse collection</li>
+<li><code>test/.../BeerOrderRepositoryTest.java</code> (+1/−1) — <code>save</code> instead of <code>saveAndFlush</code></li>
+</ul>
+<h4><code>BeerOrder</code>: constructor + syncing setter</h4>
+<pre><code class="language-java">@Setter
+@Entity
+@NoArgsConstructor
+@Builder                        // @AllArgsConstructor removed
+public class BeerOrder {
+
+    public BeerOrder(UUID id, Long version, Timestamp createdDate, Timestamp lastModifiedDate,
+                     String customerRef, Customer customer, Set&lt;BeerOrderLine&gt; beerOrderLines) {
+        this.id = id;
+        this.version = version;
+        this.createdDate = createdDate;
+        this.lastModifiedDate = lastModifiedDate;
+        this.customerRef = customerRef;
+        this.setCustomer(customer);          // &lt;-- routed through the helper
+        this.beerOrderLines = beerOrderLines;
+    }
+
+    ...
+
+    @ManyToOne
+    private Customer customer;
+
+    public void setCustomer(Customer customer) {
+        this.customer = customer;
+        customer.getBeerOrders().add(this);  // &lt;-- keeps the inverse side in sync
+    }
+}
+</code></pre>
+<ul>
+<li><strong><code>@AllArgsConstructor</code> was removed and hand-replaced</strong> by a constructor with the same signature, differing in one line: it calls <code>this.setCustomer(customer)</code> instead of <code>this.customer = customer</code>. This matters because Lombok&#39;s <code>@Builder</code> builds through the all-args constructor — so <strong><code>builder.build()</code> now automatically routes through the syncing setter</strong>. That is the whole trick of the branch: you get the two-sided consistency for free from the builder.</li>
+<li><strong><code>setCustomer</code> overrides Lombok&#39;s generated setter.</strong> Lombok&#39;s <code>@Setter</code> skips generating a setter for a field that already has a hand-written one, so this method is the only <code>setCustomer</code>. It does two things: assigns the owning field (which becomes <code>customer_id</code>), and adds <code>this</code> order to the customer&#39;s inverse <code>beerOrders</code> collection.</li>
+<li>The purpose is the classic JPA <strong>&quot;set both sides&quot; helper</strong>: in a bidirectional association, if you only set <code>order.setCustomer(c)</code> the in-memory <code>c.getBeerOrders()</code> stays stale until a reload. The helper writes the relationship to both objects at once.</li>
+</ul>
+<h4><code>Customer</code>: initialized inverse collection</h4>
+<pre><code class="language-java">@Builder.Default
+@OneToMany(mappedBy = &quot;customer&quot;)
+private Set&lt;BeerOrder&gt; beerOrders = new HashSet&lt;&gt;();
+</code></pre>
+<ul>
+<li><strong>Initialized to <code>new HashSet&lt;&gt;()</code>.</strong> This is what makes the helper safe: without it, <code>customer.getBeerOrders()</code> would be <code>null</code> and <code>.add(this)</code> in <code>setCustomer</code> would throw <code>NullPointerException</code>. Because <code>@Builder</code> would otherwise ignore the field initializer (Lombok&#39;s builder only sets fields you specify, and would leave the default as the Java field default), <strong><code>@Builder.Default</code></strong> is added so that a builder-built customer still gets the empty <code>HashSet</code> rather than <code>null</code>.</li>
+<li>Fetch type remains the <code>@OneToMany</code> default, <code>LAZY</code>.</li>
+</ul>
+<h4>Test change</h4>
+<pre><code class="language-java">- BeerOrder savedBeerOrder = beerOrderRepository.saveAndFlush(beerOrder);
++ BeerOrder savedBeerOrder = beerOrderRepository.save(beerOrder);
+</code></pre>
+<p>Reverting to <code>save</code> — the test now relies on the surrounding <code>@Transactional</code> to flush at commit time (then roll back). The printed <code>customerRef</code> does not depend on a flush, so this works.</p>
+<h4>What the branch achieves and its caveats</h4>
+<p><strong>Achieves:</strong> constructing a <code>BeerOrder</code> (via builder or the constructor) with a <code>Customer</code> now updates both the order&#39;s owning field and the customer&#39;s in-memory collection.</p>
+<p><strong>Caveats:</strong></p>
+<ul>
+<li><strong><code>setCustomer</code> has no null guard.</strong> Passing <code>null</code> (or building an order with no customer, as the builder would if <code>.customer(...)</code> is omitted) throws <code>NullPointerException</code> on <code>customer.getBeerOrders()</code>. Since the builder always calls the constructor, an order cannot be built without a non-null customer on this branch.</li>
+<li><strong>Sync is one-directional.</strong> Only the order→customer direction is handled. There is no <code>Customer.addBeerOrder(...)</code> and no <code>removeBeerOrder(...)</code>, and no equivalent helper for <code>BeerOrderLine</code>, so the inverse collections cannot be maintained when adding/removing lines or detaching an order.</li>
+<li><strong>No cascade still.</strong> Syncing the in-memory collection does not make Hibernate persist related entities; that remains explicit.</li>
+<li><strong>Lazy-loading consequence.</strong> Touching <code>customer.getBeerOrders()</code> on a lazy proxy triggers a load, so the helper can cause an extra query depending on context.</li>
+</ul>
+<h4>Empirical evidence</h4>
+<p>Started with the <code>localmysql</code> profile (MariaDB already running, so it was reused rather than restarted):</p>
+<pre><code class="language-text">Found 3 JPA repository interfaces.
+Schema `restdb` is up to date. No migration necessary.
+Started Spring7RestMvcApplication in 22.199 seconds
+</code></pre>
+<p>The modified test passes and exercises the helper through the builder path:</p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerOrderRepositoryTest
+</code></pre>
+<pre><code class="language-text">Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+</code></pre>
+<p>No orders were persisted (the <code>@Transactional</code> test still rolls back, and it runs on H2), and the running app was unaffected:</p>
+<pre><code class="language-text">beers: 2429
+beer_order count: 0
+</code></pre>
+<p>The order REST API still does not exist — this branch is still model/documentation-level groundwork for the service layer that follows.</p>
+<h2>Branch 105: many-to-many (Beer ↔ Category)</h2>
+<h3><code>105-many-to-many</code></h3>
+<p>Branch created from <code>origin/105-many-to-many</code>. Three files, +96 lines. Introduces a <strong>many-to-many</strong> association between <code>Beer</code> and a new <code>Category</code> entity, plus the join table via a new Flyway migration.</p>
+<ul>
+<li><code>entities/Category.java</code> (new, 69 lines)</li>
+<li><code>entities/Beer.java</code> (+6) — the <code>categories</code> association</li>
+<li><code>db/migration/V4__category.sql</code> (new, 21 lines)</li>
+</ul>
+<h4>The join-table migration</h4>
+<pre><code class="language-sql">drop table if exists category;
+drop table if exists beer_category;
+
+create table category
+(
+    id                 varchar(36) NOT NULL PRIMARY KEY,
+    description        varchar(50),
+    created_date       timestamp,
+    last_modified_date datetime(6) DEFAULT NULL,
+    version            bigint      DEFAULT NULL
+) ENGINE = InnoDB;
+
+create table beer_category
+(
+    beer_id     varchar(36) NOT NULL,
+    category_id varchar(36) NOT NULL,
+    primary key (beer_id, category_id),
+    constraint pc_beer_id_fk FOREIGN KEY (beer_id) references beer (id),
+    constraint pc_category_id_fk FOREIGN KEY (category_id) references category (id)
+) ENGINE = InnoDB;
+</code></pre>
+<ul>
+<li><code>beer_category</code> is the classic <strong>join table</strong>: a <strong>composite primary key</strong> <code>(beer_id, category_id)</code> and two FKs back to <code>beer</code> and <code>category</code>.</li>
+<li>The composite PK makes each (beer, category) pair unique — a beer cannot be in the same category twice.</li>
+</ul>
+<h4><code>Category</code> entity</h4>
+<pre><code class="language-java">@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Entity
+public class Category {
+
+    @Id
+    @GeneratedValue(generator = &quot;UUID&quot;)
+    @GenericGenerator(name = &quot;UUID&quot;, strategy = &quot;org.hibernate.id.UUIDGenerator&quot;)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(length = 36, columnDefinition = &quot;varchar(36)&quot;, updatable = false, nullable = false )
+    private UUID id;
+
+    @Version
+    private Long version;
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private Timestamp createdDate;
+
+    @UpdateTimestamp
+    private Timestamp lastModifiedDate;
+
+    private String description;
+
+    @ManyToMany
+    @JoinTable(name = &quot;beer_category&quot;,
+      joinColumns = @JoinColumn(name = &quot;category_id&quot;),
+      inverseJoinColumns = @JoinColumn(name = &quot;beer_id&quot;))
+    private Set&lt;Beer&gt; beers;
+
+    @Override public boolean equals(Object o) { ... compares description ... }
+    @Override public int hashCode() { ... based on description ... }
+}
+</code></pre>
+<ul>
+<li>Uses <code>@GenericGenerator</code> (the older Hibernate generator API) instead of <code>@UuidGenerator</code> used by the other entities. On this build it <strong>compiles with deprecation warnings</strong> — Hibernate emits <code>GenericGenerator ... has been deprecated and marked for removal</code> — but it still resolves to the UUID generator, so the ids are UUID-shaped <code>varchar(36)</code> as expected.</li>
+<li>Its <code>@ManyToMany</code> point at the <strong>same</strong> <code>beer_category</code> table as <code>Beer</code> but with <code>joinColumns</code>/<code>inverseJoinColumns</code> <strong>swapped</strong>.</li>
+<li><code>equals</code>/<code>hashCode</code> are overridden to compare <code>description</code>, and <code>equals</code> also calls <code>super.equals(o)</code> (Object identity). Using a mutable field such as <code>description</code> for hashing is a known hazard in a <code>Set</code>/<code>Map</code>: mutating <code>description</code> after the entity is in a collection changes its hash and can make it unfindable. It also means two categories with the same description but different ids are &quot;equal&quot;, which is usually not what you want for entities.</li>
+</ul>
+<h4><code>Beer</code> entity change</h4>
+<pre><code class="language-java">@ManyToMany
+@JoinTable(name = &quot;beer_category&quot;,
+        joinColumns = @JoinColumn(name = &quot;beer_id&quot;),
+   inverseJoinColumns = @JoinColumn(name = &quot;category_id&quot;))
+private Set&lt;Category&gt; categories;
+</code></pre>
+<h4>The bidirectional many-to-many design (worth noting)</h4>
+<p>This is a <strong>bidirectional</strong> association, but unusually <strong>both sides declare <code>@JoinTable</code></strong> on the same table with mirrored columns rather than one side using <code>mappedBy</code>. In a conventional JPA bidirectional M2M, only the owning side declares <code>@JoinTable</code> and the inverse side uses <code>mappedBy = &quot;...&quot;</code>, so there is one writer of the join rows. Here, both <code>Beer</code> and <code>Category</code> are owners of the same physical table. Hibernate accepted this and validation passed, treating them as two associations sharing <code>beer_category</code>. It works, but it means there is no single &quot;owning&quot; side, and it is the configuration the next branch (<code>106-rel-many-to-many-persistence</code>) likely revisits when it comes to persisting associations.</p>
+<h4>Other inconsistencies observed</h4>
+<ul>
+<li><strong>Drop order in V4 is reversed</strong> relative to V3: it drops <code>category</code> <em>before</em> <code>beer_category</code>, yet <code>beer_category</code> holds an FK to <code>category</code>. On a fresh database both are absent so the drops are no-ops and the migration succeeds; but if the tables existed with data, dropping the referenced <code>category</code> first would fail with a foreign-key error. (V3 correctly dropped the child table first.) Since Flyway runs V4 exactly once, this never bites in normal operation — it is a latent issue only if the script is run by hand against a populated schema.</li>
+<li><strong>Column type inconsistency within one table:</strong> <code>category.created_date</code> is <code>timestamp</code> while <code>last_modified_date</code> is <code>datetime(6)</code>.</li>
+<li><strong>Length mismatch that Hibernate does not catch:</strong> DDL declares <code>description varchar(50)</code>, but the entity field has no <code>@Column(length=...)</code>, so Hibernate&#39;s implicit default is 255. Schema <em>validation</em> checks that mapped columns exist and have a compatible type — it does not compare lengths — so validation passed.</li>
+</ul>
+<h4>Empirical evidence</h4>
+<p>MariaDB was already running (reused, not restarted). Flyway applied the new migration on startup:</p>
+<pre><code class="language-text">Migrating schema `restdb` to version &quot;4 - category&quot;
+Successfully applied 1 migration to schema `restdb`, now at version v4 (execution time 00:00.150s)
+Started Spring7RestMvcApplication in 21.987 seconds
+</code></pre>
+<p><code>flyway_schema_history</code>: versions 1–4 all <code>success = 1</code>.</p>
+<p>Tables now present: <code>beer</code>, <code>beer_category</code>, <code>beer_order</code>, <code>beer_order_line</code>, <code>category</code>, <code>customer</code>, <code>flyway_schema_history</code>.</p>
+<p><code>beer_category</code> structure confirmed:</p>
+<pre><code class="language-text">beer_id      varchar(36)  NO  PRI
+category_id  varchar(36)  NO  PRI
+PRIMARY KEY (beer_id, category_id)
+CONSTRAINT pc_beer_id_fk     FOREIGN KEY (beer_id)     REFERENCES beer (id)
+CONSTRAINT pc_category_id_fk FOREIGN KEY (category_id) REFERENCES category (id)
+</code></pre>
+<p>Spring Data still reports <strong>3 JPA repository interfaces</strong> (no <code>CategoryRepository</code>), so the new entity remains unreachable over REST. The beer API is unaffected:</p>
+<pre><code class="language-text">curl .../api/v1/beer?pageNumber=1&amp;pageSize=1  -&gt;  beers: 2429
+</code></pre>
+<p>Compile-time deprecation warning captured:</p>
+<pre><code class="language-text">Category.java: org.hibernate.annotations.GenericGenerator ... has been deprecated and marked for removal
+</code></pre>
+<h2>Branch 106: many-to-many persistence</h2>
+<h3><code>106-rel-many-to-many-persistence</code></h3>
+<p>Branch created from <code>origin/106-rel-many-to-many-persistence</code>. Four files, +76/−13. This branch makes the Beer↔Category many-to-many <strong>persistable</strong> and fixes the deprecation warning introduced on branch 105.</p>
+<ul>
+<li><code>entities/Beer.java</code> (+14) — <code>@Builder.Default</code>-annotated, pre-initialized <code>categories</code> collection plus <code>addCategory</code> / <code>removeCategory</code> helpers</li>
+<li><code>entities/Category.java</code> (+8/−7) — replaces <code>@GenericGenerator</code> with <code>@UuidGenerator</code>, adds <code>@Builder</code>, pre-initializes <code>beers</code></li>
+<li><code>repositories/CategoryRepository.java</code> (new, 12 lines)</li>
+<li><code>repositories/CategoryRepositoryTest.java</code> (new, 44 lines)</li>
+</ul>
+<h4><code>Beer</code>: collection initialization + add/remove helpers</h4>
+<pre><code class="language-java">@Builder.Default
+@ManyToMany
+@JoinTable(name = &quot;beer_category&quot;,
+       joinColumns = @JoinColumn(name = &quot;beer_id&quot;),
+       inverseJoinColumns = @JoinColumn(name = &quot;category_id&quot;))
+private Set&lt;Category&gt; categories = new HashSet&lt;&gt;();
+
+public void addCategory(Category category){
+    this.categories.add(category);
+    category.getBeers().add(this);
+}
+
+public void removeCategory(Category category){
+    this.categories.remove(category);
+    category.getBeers().remove(category);
+}
+</code></pre>
+<ul>
+<li><strong><code>@Builder.Default</code> + <code>= new HashSet&lt;&gt;()</code></strong> ensures the collection is non-null even when a <code>Beer</code> is built via <code>Beer.builder()</code> (Lombok&#39;s builder would otherwise leave the field at its Java default of <code>null</code>, which would NPE on <code>.add</code>). <code>@Builder.Default</code> is what makes the initializer survive the builder.</li>
+<li><strong><code>addCategory</code></strong> is the two-sided sync helper: it adds the category to this beer&#39;s side <strong>and</strong> adds this beer to the category&#39;s side, keeping both <code>@JoinTable</code> owners consistent in memory. Either side can then be saved to flush the join rows.</li>
+<li><strong><code>removeCategory</code> has a bug.</strong> The second line reads <code>category.getBeers().remove(category)</code> — it tries to remove a <code>Category</code> from a <code>Set&lt;Beer&gt;</code>. <code>Set.remove(Object)</code> compiles and return-<code>false</code>s silently, so <strong>the beer is never actually removed from the category&#39;s side</strong>. The intended call is <code>category.getBeers().remove(this)</code>. Left as-is, detaching a category via this helper leaves a dangling half of the association. It is the kind of latent bug that only matters once code path sees real use (no test exercises <code>removeCategory</code>).</li>
+</ul>
+<h4><code>Category</code>: generator fix + builder</h4>
+<pre><code class="language-java">@Builder                              // added
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Entity
+public class Category {
+
+    @Id @GeneratedValue(generator = &quot;UUID&quot;)
+    @UuidGenerator                    // was: @GenericGenerator(name=&quot;UUID&quot;, strategy=&quot;...&quot;) 
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(...)
+    private UUID id;
+    ...
+    @Builder.Default
+    @ManyToMany @JoinTable(name = &quot;beer_category&quot;,
+      joinColumns = @JoinColumn(name = &quot;category_id&quot;),
+      inverseJoinColumns = @JoinColumn(name = &quot;beer_id&quot;))
+    private Set&lt;Beer&gt; beers = new HashSet&lt;&gt;();
+</code></pre>
+<ul>
+<li><code>@GenericGenerator</code> (Hibernate 7: deprecated, &quot;marked for removal&quot;) is replaced by <code>@UuidGenerator</code> — <strong>the same generator used by every other entity</strong>. The compile-time deprecation warning that branch 105 reported is eliminated.</li>
+<li><code>@Builder</code> is added so categories can be created via <code>Category.builder()...build()</code>; with the existing <code>@AllArgsConstructor</code> present, Lombok wires the builder through the all-args constructor.</li>
+<li><code>beers</code> is initialized with <code>@Builder.Default</code> for the same null-safety reason as <code>Beer.categories</code>.</li>
+</ul>
+<h4><code>CategoryRepository</code> and its test</h4>
+<pre><code class="language-java">public interface CategoryRepository extends JpaRepository&lt;Category, UUID&gt; { }
+</code></pre>
+<pre><code class="language-java">@SpringBootTest
+class CategoryRepositoryTest {
+    @Autowired CategoryRepository categoryRepository;
+    @Autowired BeerRepository beerRepository;
+    Beer testBeer;
+
+    @BeforeEach
+    void setUp() {
+        testBeer = beerRepository.findAll().get(0);
+    }
+
+    @Transactional
+    @Test
+    void testAddCategory() {
+        Category savedCat = categoryRepository.save(Category.builder()
+                .description(&quot;Ales&quot;).build());
+
+        testBeer.addCategory(savedCat);
+        Beer saveBeer = beerRepository.save(testBeer);
+
+        System.out.println(saveBeer.getBeerName());
+    }
+}
+</code></pre>
+<ul>
+<li><code>setUp()</code> grabs the first beer — on the H2 test DB (default profile) this is <strong>Galaxy Cat</strong>, the first seeded beer, because <code>BootstrapData</code> runs under <code>@SpringBootTest</code>.</li>
+<li>The test exercises the <strong>Beer-owning-side</strong> write path: it saves the category first (no beers yet, so no join rows), then <code>addCategory</code> links the two in memory, then <code>beerRepository.save(testBeer)</code> flushes the <code>beer_category</code> row. <code>@Transactional</code> rolls the whole thing back, so nothing persists.</li>
+<li><code>@ManyToOne</code> on <code>BeerOrderLine</code>/<code>BeerOrder</code>/<code>Category</code> associations defaults to <strong>EAGER</strong> fetch; here it means <code>beerRepository.findAll()</code> loads each beer and, because <code>Beer.categories</code> is <code>Set&lt;Category&gt;</code> with default <code>@ManyToMany</code> (which is <strong>LAZY</strong>, not EAGER — <code>@ManyToMany</code> defaults to LAZY), the categories won&#39;t be initialized by the findAll. (Fetch defaults: <code>@ManyToMany</code> → LAZY, <code>@ManyToOne</code> → EAGER.)</li>
+</ul>
+<h4>Runtime evidence</h4>
+<p>MariaDB was already up (reused). Flyway already at v4: <code>Schema \</code>restdb` is up to date. No migration necessary.`</p>
+<p>Repository scanning now finds <strong>4 JPA repository interfaces</strong> (the new <code>CategoryRepository</code>):</p>
+<pre><code class="language-text">Found 4 JPA repository interfaces.
+Started Spring7RestMvcApplication in 21.066 seconds
+</code></pre>
+<p>Tests:</p>
+<pre><code class="language-bash">mvn -o test -Dtest=CategoryRepositoryTest
+</code></pre>
+<pre><code class="language-text">Tests run: 1, Failures: 0, Errors: 0, Skipped: 0   -- printed: Galaxy Cat
+</code></pre>
+<p>Regression check (the <code>Beer.java</code> change touches the entity behind the main controller):</p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerControllerIT
+</code></pre>
+<pre><code class="language-text">Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS   -- no regression
+</code></pre>
+<p>And the deprecation warning that branch 105 reported is gone (verified 0 occurrences of <code>GenericGenerator.*deprecated</code> in the branch-106 run log). REST still healthy:</p>
+<pre><code class="language-text">curl .../api/v1/beer?pageNumber=1&amp;pageSize=1  -&gt;  beers: 2429
+</code></pre>
+<h4>Summary of the relationship layer after this branch</h4>
+<table>
+<thead>
+<tr>
+<th>Entity pair</th>
+<th>Owning side (writes FK/join)</th>
+<th>Inverse side</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Customer ↔ BeerOrder</td>
+<td><code>BeerOrder.customer</code> (<code>@ManyToOne</code>, EAGER)</td>
+<td><code>Customer.beerOrders</code> (<code>@OneToMany</code>, LAZY)</td>
+</tr>
+<tr>
+<td>BeerOrder ↔ BeerOrderLine</td>
+<td><code>BeerOrderLine.beerOrder</code> (<code>@ManyToOne</code>, EAGER)</td>
+<td><code>BeerOrder.beerOrderLines</code> (<code>@OneToMany</code>, LAZY)</td>
+</tr>
+<tr>
+<td>Beer ↔ BeerOrderLine</td>
+<td><code>BeerOrderLine.beer</code> (<code>@ManyToOne</code>, EAGER)</td>
+<td><code>Beer.beerOrderLines</code> (<code>@OneToMany</code>, LAZY)</td>
+</tr>
+<tr>
+<td>Beer ↔ Category</td>
+<td><code>Beer.categories</code> (<code>@ManyToMany</code>, LAZY, <code>beer_id</code> join) <strong>+ also</strong> <code>Category.beers</code> (<code>@ManyToMany</code>, LAZY, <code>category_id</code> join)</td>
+<td>mutual — no <code>mappedBy</code> on either side</td>
+</tr>
+</tbody></table>
+<p>The Beer↔BeerOrderLine and BeerOrder↔BeerOrderLine pairs are now complete two-sided associations with helper-sync logic on the Beer↔Category side. The order aggregate still has no service/DTO/mapper/controller, so it remains unreachable over HTTP. The Beer↔Category M2M having <strong>both sides as owners</strong> (no <code>mappedBy</code>) remains the open design question for the persistence path — saving via both sides could write duplicate join rows.</p>
+<h2>Branch 107: order shipment (one-to-one)</h2>
+<h3><code>107-rel-one-to-one</code></h3>
+<p>Branch created from <code>origin/107-rel-one-to-one</code>. Three files, +71/−2. Adds a <strong>one-to-one</strong> association between <code>BeerOrder</code> and a new <code>BeerOrderShipment</code> entity (the &quot;shipment tracking&quot; side), plus the corresponding schema and an explicit all-args constructor that now also carries the shipment.</p>
+<ul>
+<li><code>entities/BeerOrder.java</code> (+7/−2) — new <code>@OneToOne BeerOrderShipment beerOrderShipment</code> field and an extended explicit constructor that assigns it</li>
+<li><code>entities/BeerOrderShipment.java</code> (new, 47 lines) — UUID id, <code>Long version</code>, <code>@OneToOne BeerOrder beerOrder</code>, <code>trackingNumber</code>, <code>Timestamp</code> timestamps, <code>@Builder</code></li>
+<li><code>db/migration/V5__order-shipment.sql</code> (new, 19 lines) — creates <code>beer_order_shipment</code> and adds <code>beer_order_shipment_id</code> to <code>beer_order</code></li>
+</ul>
+<h4>The one-to-one design (two unidirectional joins)</h4>
+<p>The association is implemented as <strong>two independent, one-sided <code>@OneToOne</code> associations</strong> rather than a single bidirectional one with <code>mappedBy</code>:</p>
+<pre><code class="language-java">// BeerOrder.java
+@OneToOne
+private BeerOrderShipment beerOrderShipment;
+</code></pre>
+<pre><code class="language-java">// BeerOrderShipment.java
+@OneToOne
+private BeerOrder beerOrder;
+</code></pre>
+<p>Why two sides both owning a FK instead of <code>@JoinColumn(optional=false, mappedBy=...)</code> on one side? Because MySQL/MariaDB <strong>has no deferred foreign-key checks</strong>: when both sides point at each other with a single FK column, inserting a parent and its child in the same transaction is impossible — the child&#39;s FK to the not-yet-inserted parent fails before the row exists. Splitting the FK column onto each table side sidesteps this entirely:</p>
+<ul>
+<li><code>beer_order_shipment.beer_order_id VARCHAR(36) UNIQUE</code> → FK to <code>beer_order(id)</code> (the <strong>BeerOrderShipment → BeerOrder</strong> direction). The <code>UNIQUE</code> makes it a true one-to-one (one shipment per order); it is nullable because the row can be inserted before the back-reference is set.</li>
+<li><code>beer_order.beer_order_shipment_id VARCHAR(36)</code> → FK to <code>beer_order_shipment(id)</code> (the <strong>BeerOrder → BeerOrderShipment</strong> direction), added via <code>ALTER TABLE</code> after the shipment table exists.</li>
+</ul>
+<p>Hibernate&#39;s <strong>default <code>@OneToOne</code> join column</strong> naming (<code>beerOrder_id</code> / <code>beer_order_shipment_id</code>) happened to match the explicit DDL column names, so <code>ddl-auto=validate</code> passed with no <code>Schema-validation</code> error — verified in the run log (<code>Started Spring7RestMvcApplication</code>, no schema errors).</p>
+<h4><code>BeerOrderShipment</code> entity</h4>
+<pre><code class="language-java">@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Entity @Builder
+public class BeerOrderShipment {
+    @Id @GeneratedValue(generator=&quot;UUID&quot;) @UuidGenerator
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(length=36, columnDefinition=&quot;varchar(36)&quot;, updatable=false, nullable=false)
+    private UUID id;
+
+    @Version
+    private Long version;
+
+    @OneToOne
+    private BeerOrder beerOrder;          // FK column beer_order_id, UNIQUE
+
+    private String trackingNumber;
+
+    @CreationTimestamp @Column(updatable = false) private Timestamp createdDate;
+    @UpdateTimestamp                        private Timestamp lastModifiedDate;
+
+    @Override public int hashCode() { return super.hashCode(); }
+}
+</code></pre>
+<ul>
+<li>Mirrors the field typing of the rest of the order aggregate: <strong><code>Long version</code></strong> and <strong><code>java.sql.Timestamp</code></strong> timestamps.</li>
+<li>Uses <code>@UuidGenerator</code> (the modern generator, no deprecation warning).</li>
+<li><code>hashCode()</code> simply delegates to <code>super.hashCode()</code> (identity) rather than keying off <code>trackingNumber</code> — so it avoids the mutable-field trap that <code>Category</code> fell into on branch 105.</li>
+</ul>
+<h4><code>BeerOrder</code> constructor change</h4>
+<p>The hand-written all-args constructor (the one <code>@Builder</code> routes through) gained a trailing <code>BeerOrderShipment beerOrderShipment</code> parameter and assigns it directly:</p>
+<pre><code class="language-java">public BeerOrder(UUID id, Long version, Timestamp createdDate, Timestamp lastModifiedDate,
+                 String customerRef, Customer customer, Set&lt;BeerOrderLine&gt; beerOrderLines,
+                 BeerOrderShipment beerOrderShipment) {
+    ...
+    this.setCustomer(customer);
+    this.beerOrderLines = beerOrderLines;
+    this.beerOrderShipment = beerOrderShipment;
+}
+</code></pre>
+<p>Because <code>@Builder</code> builds via this all-args constructor, every <code>BeerOrder.builder()…build()</code> call now <strong>must</strong> supply <code>beerOrderShipment</code> (or <code>null</code> explicitly). Existing call sites that don&#39;t will fail to compile — but there are currently no builders constructing <code>BeerOrder</code> in the main sources (only <code>Customer.builder()</code> and <code>Beer.builder()</code> are used in <code>BootstrapData</code>), so the build is unaffected. The order entities still have no service/DTO/mapper/controller, so this is pure model-layer work — nothing here is reachable over HTTP yet.</p>
+<h4>The schema (what Flyway applied)</h4>
+<p><code>V5__order-shipment.sql</code> — note it is <strong>idempotently written with <code>CREATE TABLE</code> directly</strong> (no <code>drop table if exists</code> for <code>beer_order</code> itself) and finishes the link with an <code>ALTER</code>:</p>
+<pre><code class="language-sql">drop table if exists beer_order_shipment;
+
+CREATE TABLE beer_order_shipment
+(
+    id                 VARCHAR(36) NOT NULL PRIMARY KEY,
+    beer_order_id            VARCHAR(36) UNIQUE,
+    tracking_number    VARCHAR(50),
+    created_date       TIMESTAMP,
+    last_modified_date DATETIME(6) DEFAULT NULL,
+    version            BIGINT      DEFAULT NULL,
+    CONSTRAINT bos_pk FOREIGN KEY (beer_order_id) REFERENCES beer_order (id)
+) ENGINE = InnoDB;
+
+ALTER TABLE beer_order
+    ADD COLUMN beer_order_shipment_id VARCHAR(36);
+
+ALTER TABLE beer_order
+    ADD CONSTRAINT bos_shipment_fk
+        FOREIGN KEY (beer_order_shipment_id) REFERENCES beer_order_shipment (id);
+</code></pre>
+<p><code>beer_order_id</code> is <code>UNIQUE</code>, enforcing the one-to-one cardinality at the DB level (one shipment row per order, nullable so the shipment can be created before the back-reference is populated).</p>
+<h4>Runtime evidence</h4>
+<p>MariaDB reused (already up). Flyway:</p>
+<pre><code class="language-text">Migrating schema `restdb` to version &quot;5 - order-shipment&quot;
+Successfully applied 1 migration to schema `restdb`, now at version v5 (execution time 00:00.190s)
+Started Spring7RestMvcApplication in 23.102 seconds
+</code></pre>
+<p><code>flyway_schema_history</code>: versions 1–5 all <code>success = 1</code>. <strong>4 JPA repository interfaces</strong> (no <code>BeerOrderShipmentRepository</code> added).</p>
+<p>Schema confirmed live:</p>
+<pre><code class="language-text">beer_order_shipment.beer_order_id  varchar(36)  YES  UNI   -&gt; FK beer_order(id)
+beer_order.beer_order_shipment_id  varchar(36)            -&gt; FK beer_order_shipment(id)
+</code></pre>
+<p>REST unchanged:</p>
+<pre><code class="language-text">curl .../api/v1/beer?pageNumber=1&amp;pageSize=1  -&gt;  HTTP 200, 2429 beers
+</code></pre>
+<p>Regression (<code>BeerOrder.java</code> is touched):</p>
+<pre><code class="language-text">BeerControllerIT: Tests run: 16, Failures: 0, Errors: 0, BUILD SUCCESS
+</code></pre>
+<h2>Branch 108: persist the one-to-one</h2>
+<h3><code>108-rel-one-to-one-pers</code></h3>
+<p>Branch created from <code>origin/108-rel-one-to-one-pers</code>. Two files, +18/−5. Branch 107 declared the BeerOrder↔BeerOrderShipment one-to-one but <strong>left it unpersistable</strong> (no cascade, no inverse-side sync). This branch applies the exact same <strong>helper + cascade</strong> pattern that branch 104 used for <code>BeerOrder.customer</code>, this time to the one-to-one, and wires a shipment into the order repository test.</p>
+<ul>
+<li><code>entities/BeerOrder.java</code> (+13/−7) — new <code>setBeerOrderShipment</code> sync helper; the all-args constructor routes the field through that setter; <code>@OneToOne</code> gains <code>cascade = CascadeType.PERSIST</code>; the wildcard imports <code>import lombok.*</code> / <code>import org.hibernate.annotations.*</code> are narrowed to explicit imports (no behavior change)</li>
+<li><code>repositories/BeerOrderRepositoryTest.java</code> (+5) — builds a shipment (<code>.trackingNumber(&quot;1235r&quot;)</code>) into the beer order and saves it</li>
+</ul>
+<h4>The persistence fix</h4>
+<pre><code class="language-java">// BeerOrder.java
+public void setBeerOrderShipment(BeerOrderShipment beerOrderShipment) {
+    this.beerOrderShipment = beerOrderShipment;
+    beerOrderShipment.setBeerOrder(this);          // sync the inverse side
+}
+
+@OneToOne(cascade = CascadeType.PERSIST)            // was: bare @OneToOne
+private BeerOrderShipment beerOrderShipment;
+</code></pre>
+<p>Two things are required for a one-to-one to save correctly, and this branch adds both:</p>
+<ol>
+<li><strong><code>cascade = CascadeType.PERSIST</code></strong> — without it, <code>beerOrderRepository.save(beerOrder)</code> writes the order row but <strong>not</strong> the shipment row. The order&#39;s <code>beer_order_shipment_id</code> would then point at a non-existent <code>beer_order_shipment.id</code> (or be null), violating the FK constraint added by V5. Cascade is what makes the shipment row follow the order into the transaction in one <code>save()</code>.</li>
+<li><strong><code>setBeerOrderShipment</code> syncs the inverse side</strong> — <code>beerOrderShipment.setBeerOrder(this)</code> populates the shipment&#39;s <code>beer_order_id</code> FK, so the join actually links the two rows. The explicit all-args constructor now calls <code>this.setBeerOrderShipment(beerOrderShipment)</code> (instead of the old direct <code>this.beerOrderShipment = beerOrderShipment</code>) so the field assignment <strong>always</strong> goes through the sync setter — the same trick branch 104 used for <code>setCustomer</code>.</li>
+</ol>
+<p>This is structurally identical to 104&#39;s approach: <strong>the builder routes through an all-args constructor that delegates field writes to two-sided setters, and <code>@Builder.Default</code> keeps collections non-null</strong>. The difference is one-to-one (<code>@OneToOne</code>, single object) instead of many-to-one.</p>
+<p>The updated test exercises the round-trip:</p>
+<pre><code class="language-java">@Test @Transactional
+void testBeerOrders() {
+    BeerOrder beerOrder = BeerOrder.builder()
+            .customerRef(&quot;Test order&quot;)
+            .customer(testCustomer)
+            .beerOrderShipment(BeerOrderShipment.builder()
+                    .trackingNumber(&quot;1235r&quot;)
+                    .build())
+            .build();
+
+    BeerOrder savedBeerOrder = beerOrderRepository.save(beerOrder);
+    System.out.println(savedBeerOrder.getCustomerRef());
+}
+</code></pre>
+<h4>What&#39;s still not done</h4>
+<ul>
+<li><code>beerOrderShipment</code>/<code>setBeerOrderShipment</code> have <strong>no null guard</strong> — building an <code>BeerOrder</code> without a shipment NPEs inside the setter (e.g. <code>NullPointerException</code> in <code>setBeerOrderShipment</code> → <code>beerOrderShipment.setBeerOrder</code>), exactly as <code>setCustomer</code> does without a customer. Since <code>@Builder</code> funnels through the all-args constructor, every builder call must supply the shipment (the test does). This is consistent with the codebase&#39;s current &quot;no defensive null-checks&quot; stance for internal builders.</li>
+<li>There is still <strong>no <code>BeerOrderShipmentRepository</code>, no service/DTO/mapper/controller</strong> — the entity pair is model-only and remains unreachable over HTTP.</li>
+<li>The test still asserts only indirectly (it prints <code>customerRef</code> and relies on the save not throwing); <code>@Transactional</code> rolls everything back, so no order rows leak into the test DB.</li>
+<li>Only <code>CascadeType.PERSIST</code> is set (not <code>ALL</code>/<code>MERGE</code>), so <strong>updating</strong> an order&#39;s shipment must be done explicitly — a deliberately narrow cascade, consistent with how 104 handled <code>customer</code>/<code>customerRef</code>.</li>
+</ul>
+<h4>Runtime evidence</h4>
+<p>App was already running from the 107 run (reused — MariaDB stayed up):</p>
+<pre><code class="language-text">Repository scanning ... Found 4 JPA repository interfaces.
+Schema `restdb` is up to date. No migration necessary.
+Started Spring7RestMvcApplication in 43.886 seconds
+</code></pre>
+<p>Repository count stayed at <strong>4</strong> (no new repository interface). Test (H2/default profile):</p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerOrderRepositoryTest
+</code></pre>
+<pre><code class="language-text">Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+</code></pre>
+<p>A passing <code>save</code> confirms the cascade wrote the shipment row and the <code>setBeerOrderShipment</code> setter populated <code>beer_order_shipment.beer_order_id</code> with no FK/NULL violation.</p>
+<h2>Overall progression</h2>
+<p>The session progressed from Lombok model conveniences, through MySQL/MariaDB connectivity and pooling, to Flyway-owned schema migrations. It then added a customer column, introduced CSV parsing and database bootstrap persistence, automated entity timestamps, repaired integration-test expectations, and began layering beer-name query support from the controller down toward the repository.</p>
+<h2>Detailed implementation notes</h2>
+<h3>MariaDB profile configuration</h3>
+<p>The active <code>localmysql</code> profile used throughout the runs contains the following important settings:</p>
+<pre><code class="language-properties">spring.datasource.username=restadmin
+spring.datasource.password=password
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/restdb?useUnicode=true&amp;characterEncoding=UTF-8&amp;serverTimezone=UTC
+spring.jpa.database=mysql
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.jpa.hibernate.ddl-auto=validate
+spring.flyway.enabled=true
+</code></pre>
+<p>The profile deliberately points to <code>127.0.0.1</code> rather than a Docker hostname. That is why the application can run against the manually started MariaDB server in Termux. <code>ddl-auto=validate</code> means Hibernate checks the tables and columns but does not create or alter them; Flyway owns those changes.</p>
+<p>The Hikari settings configure a five-connection pool named <code>RestDB-Pool</code>. Prepared-statement caching and server-prepared statements are enabled. SQL output, formatting, and JDBC bind-value tracing are also enabled, which explains the detailed Hibernate statements seen during POST and PATCH requests.</p>
+<h3>Flyway schema lifecycle</h3>
+<p>V1 creates two InnoDB tables. The beer table uses a <code>varchar(36)</code> UUID primary key, <code>beer_name varchar(50)</code>, <code>beer_style smallint</code>, decimal pricing, inventory quantity, UPC, timestamps, and an optimistic-locking <code>version</code> column. The customer table initially contains UUID, name, timestamps, and version.</p>
+<p>V2 adds the customer email column without recreating the table. On branch 78, startup output showed:</p>
+<pre><code class="language-text">Successfully validated 2 migrations
+Current version of schema `restdb`: 1
+Migrating schema `restdb` to version &quot;2 - add-email-to-customer&quot;
+Successfully applied 1 migration
+</code></pre>
+<p>On later branches, startup showed schema version 2 and <code>No migration necessary</code>, proving that Flyway history was reused rather than rerunning migrations.</p>
+<h3>UUID and MariaDB representation</h3>
+<p>The entities use <code>@UuidGenerator</code> for identifier generation. <code>@JdbcTypeCode(SqlTypes.CHAR)</code> tells Hibernate to bind UUID values as character data, matching the Flyway <code>varchar(36)</code> columns. Hibernate trace output confirmed bindings such as:</p>
+<pre><code class="language-text">binding parameter (9:CHAR) &lt;- [b98b91fc-1ec2-4b65-8a49-5deca3e1b594]
+</code></pre>
+<p>This is the practical difference from the earlier failing branch: the Java UUID mapping and MariaDB column definition agree on a textual UUID representation rather than relying on an incompatible database-specific UUID mapping.</p>
+<h3>CSV mapping details</h3>
+<p><code>BeerCSVRecord</code> represents the imported dataset. OpenCSV maps headers by name. The source data contains names such as <code>count.x</code>, <code>brewery_id</code>, and <code>count.y</code>; the explicit annotations prevent those names from being lost when mapped to Java fields.</p>
+<p>The bootstrap conversion intentionally creates simplified application beers:</p>
+<table>
+<thead>
+<tr>
+<th>CSV value</th>
+<th>Stored beer value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>beer</code></td>
+<td><code>beerName</code>, abbreviated to 50 characters</td>
+</tr>
+<tr>
+<td><code>style</code></td>
+<td>mapped to the application <code>BeerStyle</code> enum</td>
+</tr>
+<tr>
+<td><code>row</code></td>
+<td><code>upc</code> as a string</td>
+</tr>
+<tr>
+<td><code>count.x</code></td>
+<td><code>quantityOnHand</code></td>
+</tr>
+<tr>
+<td>no CSV price</td>
+<td>fixed price <code>10</code></td>
+</tr>
+<tr>
+<td>CSV record</td>
+<td>new generated UUID</td>
+</tr>
+</tbody></table>
+<p>The style switch covers known dataset styles such as American IPA, American Pale Lager, American Porter, Oatmeal Stout, Saison/Farmhouse Ale, and English Pale Ale. Unknown styles fall back to <code>PILSNER</code>. This fallback prevents an unmapped source value from stopping the entire bootstrap operation, but it can also reduce semantic accuracy for styles not explicitly listed.</p>
+<h3>Bootstrap idempotence and test counts</h3>
+<p><code>loadCsvData()</code> checks <code>beerRepository.count() &lt; 10</code>. On a fresh schema, the three hand-written beers are inserted first, then the CSV rows are imported. On subsequent starts, the count is already above the threshold and the CSV is skipped. This prevents duplicate imports during ordinary restarts, but it is a coarse guard: it does not verify whether every expected CSV row exists.</p>
+<p>The integration-test expected count changed from 3 to 2413 because the dataset adds approximately 2410 rows to the three initial beers. The repository test imports the service/bootstrap components into the JPA test context so the CSV data exists when testing the derived query.</p>
+<h3>Timestamp behavior</h3>
+<p>Before branch 84, timestamps were set manually in the initial bootstrap objects and could remain null for objects created through other paths. <code>@CreationTimestamp</code> and <code>@UpdateTimestamp</code> move timestamp assignment into Hibernate. A POST followed by GET on branch 84 returned values like:</p>
+<pre><code class="language-json">{
+  &quot;createdDate&quot;: &quot;2026-09-14T17:25:57.650782&quot;,
+  &quot;updateDate&quot;: &quot;2026-09-14T17:25:57.651008&quot;,
+  &quot;version&quot;: 0
+}
+</code></pre>
+<p>The PATCH SQL updated <code>update_date</code> while leaving <code>created_date</code> unchanged. The entity version also incremented from 0 to 1, providing optimistic locking for updates.</p>
+<h3>Query progression and unfinished behavior</h3>
+<p>The query feature was intentionally developed in layers:</p>
+<ol>
+<li>Branch 86 added a test for a name query.</li>
+<li>Branch 87 added the optional HTTP request parameter.</li>
+<li>Branch 88 propagated the parameter through the service interface and implementations.</li>
+<li>Branch 89 added the Spring Data derived-query method and repository test.</li>
+</ol>
+<p>The final branch inspected in the session still contained this unfinished method:</p>
+<pre><code class="language-java">List&lt;Beer&gt; listBeersByName(String beerName) {
+    return new ArrayList&lt;&gt;();
+}
+</code></pre>
+<p>Consequently, live <code>GET /api/v1/beer?beerName=IPA</code> did not yet return the expected 336 records. Depending on the active implementation path, the request returned the complete dataset or an empty name-filtered result. The repository method exists, but the service method must call it with wildcard values such as <code>%IPA%</code> before the feature is complete.</p>
+<h3>REST evidence collected</h3>
+<p>Across the runs, the stable REST behavior was:</p>
+<pre><code class="language-text">GET /api/v1/customer       -&gt; 200 with three customers
+POST /api/v1/beer          -&gt; 201 and a Location header containing a UUID
+PATCH /api/v1/beer/{id}    -&gt; 204 and an updated version/timestamp
+POST invalid beer payload  -&gt; 400 with validation messages
+</code></pre>
+<p>Successful POST input used fields <code>beerName</code>, <code>beerStyle</code>, <code>upc</code>, <code>price</code>, and <code>quantityOnHand</code>. Invalid POST input used an empty name, null style, and empty UPC, producing the expected <code>must not be blank</code> and <code>must not be null</code> messages.</p>
+<h3>Runtime warnings versus failures</h3>
+<p>The Termux Maven environment printed a Jansi native-library warning because the bundled native library was not compatible with the Android/ARM environment. Maven continued to build and run the application.</p>
+<p>Flyway warned that MariaDB 12.3 was newer than the latest version verified by the installed Flyway release. Migration validation and execution still completed successfully.</p>
+<p>Hibernate warned about the MariaDB metadata query referencing <code>RESERVED</code>, and it reported generic database metadata such as version 8.0. These warnings did not prevent datasource creation, Flyway validation, JPA initialization, HTTP startup, or CRUD requests.</p>
+<h3>Branch state and repository hygiene</h3>
+<p>No tracked application source was edited by the agent during these branch walkthroughs. The branch checkouts and runs preserved the existing untracked notes and logs. The report itself is the new untracked file <code>SESSION_BRANCH_CHANGELOG.md</code>.</p>
+<h2>Branch 91: completed name search</h2>
+<h3><code>91-query-complete-name-search</code></h3>
+<ul>
+<li><p>Replaced the unfinished service stub with a repository call:</p>
+<pre><code class="language-java">public List&lt;Beer&gt; listBeersByName(String beerName) {
+    return beerRepository.findAllByBeerNameIsLikeIgnoreCase(&quot;%&quot; + beerName + &quot;%&quot;);
+}
+</code></pre>
+</li>
+<li><p><code>StringUtils.hasText(beerName)</code> selects between <code>findAll()</code> and the name-search method.</p>
+</li>
+<li><p>The Spring Data method generates a case-insensitive <code>LIKE</code> query.</p>
+</li>
+<li><p>The controller integration test expectation changed from 100 to 336 IPA matches.</p>
+</li>
+</ul>
+<h3>Runtime evidence</h3>
+<p>The branch ran with:</p>
+<pre><code class="language-bash">mvn spring-boot:run \
+  -Dspring-boot.run.profiles=localmysql \
+  -Dspring-boot.run.jvmArguments=&#39;-Dspring.docker.compose.enabled=false&#39;
+</code></pre>
+<p>Startup completed with Spring Boot 4.0.6, Hikari <code>RestDB-Pool</code>, Flyway schema version 2, and Tomcat on port 8080.</p>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=GUBNA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Content-Length: 195
+
+[{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;createdDate&quot;:null,&quot;id&quot;:&quot;000212bc-6178-4e38-b48b-b26da298bb2e&quot;,&quot;price&quot;:10.00,&quot;quantityOnHand&quot;:1581,&quot;upc&quot;:&quot;1581&quot;,&quot;updateDate&quot;:null,&quot;version&quot;:0}]
+</code></pre>
+<p>The broader IPA search returned HTTP 200 with a 67,164-byte JSON body. Hibernate confirmed the repository call:</p>
+<pre><code class="language-text">where upper(b1_0.beer_name) like upper(?) escape &#39;\\&#39;
+binding parameter (1:VARCHAR) &lt;- [%IPA%]
+</code></pre>
+<p>The customer endpoint remained healthy:</p>
+<pre><code class="language-bash">curl -i http://127.0.0.1:8080/api/v1/customer
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Content-Length: 490
+
+[{&quot;name&quot;:&quot;Customer 1&quot;,&quot;version&quot;:1},{&quot;name&quot;:&quot;Customer 2&quot;,&quot;version&quot;:1},{&quot;name&quot;:&quot;Customer 3&quot;,&quot;version&quot;:1}]
+</code></pre>
+<p>Create and validation checks also remained successful:</p>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;Complete Search IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;upc&quot;:&quot;910000001&quot;,&quot;price&quot;:8.91,&quot;quantityOnHand&quot;:21}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 201
+Location: /api/v1/beer/c0d5df17-1d36-4c78-8d89-308976ebd26a
+Content-Length: 0
+</code></pre>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;&quot;,&quot;beerStyle&quot;:null,&quot;upc&quot;:&quot;&quot;,&quot;price&quot;:0,&quot;quantityOnHand&quot;:0}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 400
+Content-Type: application/json
+
+[{&quot;upc&quot;:&quot;must not be blank&quot;},{&quot;beerName&quot;:&quot;must not be blank&quot;},{&quot;beerStyle&quot;:&quot;must not be null&quot;}]
+</code></pre>
+<p>This branch completes the query path: request parameter → controller → service → Spring Data repository → mapped DTO list. MariaDB and the application were stopped after testing, and ports 3306 and 8080 were released.</p>
+<h2>Branch 92: beer-style search</h2>
+<h3><code>92-query-beer-style-search</code></h3>
+<ul>
+<li><p>Added <code>BeerStyle</code> as an optional request parameter to <code>BeerController.listBeers</code>:</p>
+<pre><code class="language-java">public List&lt;BeerDTO&gt; listBeers(
+        @RequestParam(required = false) String beerName,
+        @RequestParam(required = false) BeerStyle beerStyle) {
+    return beerService.listBeers(beerName, beerStyle);
+}
+</code></pre>
+</li>
+<li><p>Expanded <code>BeerService.listBeers</code> to accept both name and style.</p>
+</li>
+<li><p>Added the Spring Data repository method:</p>
+<pre><code class="language-java">List&lt;Beer&gt; findAllByBeerStyle(BeerStyle beerStyle);
+</code></pre>
+</li>
+<li><p>Added <code>BeerServiceJPA.listBeersByStyle</code>, which delegates to that repository method.</p>
+</li>
+<li><p>The JPA service currently chooses one filter at a time:</p>
+<ul>
+<li>name present and style absent → name search;</li>
+<li>name absent and style present → style search;</li>
+<li>both absent → all beers;</li>
+<li>both present → falls through to all beers rather than combining the predicates.</li>
+</ul>
+</li>
+<li><p>Updated the in-memory service and controller tests to use the two-parameter signature.</p>
+</li>
+<li><p>Added a MockMvc test expecting 548 <code>IPA</code> style records and retained the 336 name-match expectation.</p>
+</li>
+</ul>
+<h3>Runtime evidence</h3>
+<p>The branch ran with:</p>
+<pre><code class="language-bash">mvn spring-boot:run \
+  -Dspring-boot.run.profiles=localmysql \
+  -Dspring-boot.run.jvmArguments=&#39;-Dspring.docker.compose.enabled=false&#39;
+</code></pre>
+<p>Style-only search:</p>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerStyle=IPA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+BODY_BYTES=107755
+BODY_PREFIX=[{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;createdDate&quot;:null,&quot;id&quot;:&quot;000212bc-6178-4e38-b48b-b26da298bb2e&quot;,&quot;price&quot;:10.00,&quot;quantityOnHand&quot;:1581,&quot;upc&quot;:&quot;1581&quot;,&quot;updateDate&quot;:null,&quot;version&quot;:0},...]
+</code></pre>
+<p>Hibernate confirmed the style repository query:</p>
+<pre><code class="language-text">select ... from beer b1_0 where b1_0.beer_style=?
+binding parameter (1:SMALLINT) &lt;- [IPA]
+</code></pre>
+<p>Name-only search still worked:</p>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=GUBNA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Content-Length: 195
+
+[{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;createdDate&quot;:null,&quot;id&quot;:&quot;000212bc-6178-4e38-b48b-b26da298bb2e&quot;,&quot;price&quot;:10.00,&quot;quantityOnHand&quot;:1581,&quot;upc&quot;:&quot;1581&quot;,&quot;updateDate&quot;:null,&quot;version&quot;:0}]
+</code></pre>
+<p>The combined request demonstrates the current limitation:</p>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=GUBNA&amp;beerStyle=IPA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 200
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+BOTH_BODY_BYTES=472835
+BOTH_BODY_PREFIX=[{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,...all beers...}]
+</code></pre>
+<p>The combined request executes <code>findAll()</code> because the current service has no combined name-and-style repository method. Customer listing, beer creation, and validation remained healthy:</p>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;Style Search IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;upc&quot;:&quot;920000001&quot;,&quot;price&quot;:8.92,&quot;quantityOnHand&quot;:22}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 201
+Location: /api/v1/beer/09dff2c7-913d-4f75-98e1-9c8d081bd2b2
+Content-Length: 0
+</code></pre>
+<pre><code class="language-bash">curl -i -X POST http://127.0.0.1:8080/api/v1/beer \
+  -H &#39;Content-Type: application/json&#39; \
+  -d &#39;{&quot;beerName&quot;:&quot;&quot;,&quot;beerStyle&quot;:null,&quot;upc&quot;:&quot;&quot;,&quot;price&quot;:0,&quot;quantityOnHand&quot;:0}&#39;
+</code></pre>
+<pre><code class="language-text">HTTP/1.1 400
+Content-Type: application/json
+
+[{&quot;beerStyle&quot;:&quot;must not be null&quot;},{&quot;beerName&quot;:&quot;must not be blank&quot;},{&quot;upc&quot;:&quot;must not be blank&quot;}]
+</code></pre>
+<p>This branch completes independent beer-name and beer-style filters, while combined filtering remains the next design step. MariaDB and Spring Boot were stopped after testing, and ports 3306 and 8080 were released.</p>
+<h2>Branch 93: complete search params</h2>
+<h3><code>93-query-complete-search-params</code></h3>
+<p>Substantive commit: <code>01e6fe7 adding showInventory and complete search conditions</code>, merged into the branch line by <code>ad4181d Merge branch &#39;92-query-beer-style-search&#39; into 93-query-complete-search-params</code>.</p>
+<p>This branch closes the combined-filter gap left by branch 92 and adds inventory visibility control to <code>GET /api/v1/beer</code>.</p>
+<h4>Controller</h4>
+<p><code>BeerController.listBeers</code> now accepts a third optional parameter and passes all three to the service:</p>
+<pre><code class="language-java">public List&lt;BeerDTO&gt; listBeers(@RequestParam(required = false) String beerName,
+                               @RequestParam(required = false) BeerStyle beerStyle,
+                               @RequestParam(required = false) Boolean showInventory){
+    return beerService.listBeers(beerName, beerStyle, showInventory);
+}
+</code></pre>
+<h4>Service</h4>
+<p><code>BeerService.listBeers</code> signature changed from two arguments to three across <code>BeerService</code>, <code>BeerServiceImpl</code>, and <code>BeerServiceJPA</code>. The in-memory <code>BeerServiceImpl</code> only follows the new signature; it still returns the full beer map without filtering.</p>
+<p><code>BeerServiceJPA.listBeers</code> now covers all four parameter combinations instead of falling back to <code>findAll()</code> when both filters are present:</p>
+<table>
+<thead>
+<tr>
+<th>beerName</th>
+<th>beerStyle</th>
+<th>Repository call</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>set</td>
+<td>null</td>
+<td><code>findAllByBeerNameIsLikeIgnoreCase(&quot;%&quot; + beerName + &quot;%&quot;)</code></td>
+</tr>
+<tr>
+<td>null</td>
+<td>set</td>
+<td><code>findAllByBeerStyle(beerStyle)</code></td>
+</tr>
+<tr>
+<td>set</td>
+<td>set</td>
+<td><code>findAllByBeerNameIsLikeIgnoreCaseAndBeerStyle(&quot;%&quot; + beerName + &quot;%&quot;, beerStyle)</code></td>
+</tr>
+<tr>
+<td>null</td>
+<td>null</td>
+<td><code>findAll()</code></td>
+</tr>
+</tbody></table>
+<p>This resolves the branch-92 limitation where <code>?beerName=GUBNA&amp;beerStyle=IPA</code> executed <code>findAll()</code> and returned all 2413 beers.</p>
+<h4>Repository</h4>
+<pre><code class="language-java">List&lt;Beer&gt; findAllByBeerNameIsLikeIgnoreCaseAndBeerStyle(String beerName, BeerStyle beerStyle);
+</code></pre>
+<p>Spring Data derives a combined predicate from the method name: a case-insensitive name <code>LIKE</code> (upper-cased on both sides, matching the branch-91 generated SQL pattern <code>upper(beer_name) like upper(?)</code>) plus a style equality on the smallint-mapped <code>beer_style</code> column.</p>
+<h4>showInventory behavior</h4>
+<p>After the search branch runs, the service applies a response-shaping step:</p>
+<pre><code class="language-java">if (showInventory != null &amp;&amp; !showInventory) {
+    beerList.forEach(beer -&gt; beer.setQuantityOnHand(null));
+}
+</code></pre>
+<ul>
+<li><code>showInventory=true</code> or omitted (<code>null</code>) → <code>quantityOnHand</code> remains in the JSON response.</li>
+<li><code>showInventory=false</code> → <code>quantityOnHand</code> is nulled on the loaded entity objects before DTO mapping, so the response omits the inventory value.</li>
+<li>The nulling operates on detached entities: the repository call&#39;s transaction has already ended and the service method is not transactional, so the change is never flushed to the database. It only affects the response payload.</li>
+</ul>
+<h4>Tests</h4>
+<p><code>BeerControllerIT</code> gained three tests and now covers the full query matrix:</p>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>no parameters</td>
+<td>2413</td>
+</tr>
+<tr>
+<td><code>?beerName=IPA</code></td>
+<td>336</td>
+</tr>
+<tr>
+<td><code>?beerStyle=IPA</code></td>
+<td>548</td>
+</tr>
+<tr>
+<td><code>?beerName=IPA&amp;beerStyle=IPA</code></td>
+<td>310</td>
+</tr>
+<tr>
+<td><code>?beerName=IPA&amp;beerStyle=IPA&amp;showInventory=true</code></td>
+<td>310, first <code>quantityOnHand</code> not null</td>
+</tr>
+<tr>
+<td><code>?beerName=IPA&amp;beerStyle=IPA&amp;showInventory=false</code></td>
+<td>310, first <code>quantityOnHand</code> null</td>
+</tr>
+</tbody></table>
+<ul>
+<li><code>tesListBeersByStyleAndName</code> — the combined filter now returns 310 instead of the previous all-beers fall-through.</li>
+<li><code>tesListBeersByStyleAndNameShowInventoryTrue</code> / <code>...False</code> — assert inventory visibility via <code>IsNull.notNullValue()</code> and <code>IsNull.nullValue()</code>.</li>
+<li>Controller unit tests and the <code>testListBeers</code>/<code>testEmptyList</code> integration tests were updated to the three-argument signature (<code>beerServiceImpl.listBeers(null, null, false)</code> / <code>beerController.listBeers(null, null, false)</code>).</li>
+<li><code>BeerRepositoryTest</code> was not modified on this branch; its name-search expectation remains 336.</li>
+</ul>
+<h4>Runtime evidence</h4>
+<p>MariaDB was started directly (same workaround as earlier sessions):</p>
+<pre><code class="language-bash">mariadbd \
+  --user=root \
+  --datadir=/data/data/com.termux/files/usr/var/lib/mysql \
+  --socket=/data/data/com.termux/files/usr/var/run/mysqld.sock \
+  --port=3306 \
+  --bind-address=127.0.0.1 \
+  --pid-file=/tmp/spring-rest-mariadb.pid \
+  --log-error=/data/data/com.termux/files/usr/var/lib/mysql/localhost.err
+</code></pre>
+<p>The application ran with:</p>
+<pre><code class="language-bash">mvn spring-boot:run \
+  -Dspring-boot.run.profiles=localmysql \
+  -Dspring-boot.run.jvmArguments=&#39;-Dspring.docker.compose.enabled=false&#39;
+</code></pre>
+<p>Startup completed with the <code>localmysql</code> profile, Hikari pool <code>RestDB-Pool</code>, Flyway reporting <code>Successfully validated 2 migrations</code> and <code>Schema \</code>restdb` is up to date. No migration necessary.<code> (schema version 2), the usual MariaDB 12.3 newer-than-verified warning, and Tomcat on port 8080 (</code>Started Spring7RestMvcApplication in 23.594 seconds`).</p>
+<h5>Live database baseline</h5>
+<p>The MariaDB <code>restdb</code> dataset contains the 2413 bootstrap beers plus 15 beers POSTed during the branch 90–92 sessions, for 2428 total. Direct SQL counts taken before the app start:</p>
+<table>
+<thead>
+<tr>
+<th>Query</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>all beers</td>
+<td>2428</td>
+</tr>
+<tr>
+<td><code>upper(beer_name) like upper(&#39;%IPA%&#39;)</code></td>
+<td>351</td>
+</tr>
+<tr>
+<td><code>beer_style = 7</code> (IPA ordinal)</td>
+<td>563</td>
+</tr>
+<tr>
+<td>name match AND style match</td>
+<td>325</td>
+</tr>
+<tr>
+<td>customers</td>
+<td>3</td>
+</tr>
+</tbody></table>
+<h5>Combined search</h5>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=IPA&amp;beerStyle=IPA&#39;
+</code></pre>
+<pre><code class="language-text">HTTP 200, 62774 bytes, 325 records
+
+first record:
+{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;createdDate&quot;:null,&quot;id&quot;:&quot;000212bc-6178-4e38-b48b-b26da298bb2e&quot;,&quot;price&quot;:10,&quot;quantityOnHand&quot;:1581,&quot;upc&quot;:&quot;1581&quot;,&quot;updateDate&quot;:null,&quot;version&quot;:0}
+</code></pre>
+<p>The combined request now executes the derived query instead of the branch-92 <code>findAll()</code> fall-through. Hibernate logged:</p>
+<pre><code class="language-text">where
+    upper(b1_0.beer_name) like upper(?) escape &#39;\\&#39;
+    and b1_0.beer_style=?
+binding parameter (1:VARCHAR) &lt;- [%IPA%]
+binding parameter (2:SMALLINT) &lt;- [IPA]
+</code></pre>
+<h5>showInventory behavior</h5>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=IPA&amp;beerStyle=IPA&amp;showInventory=true&#39;
+</code></pre>
+<pre><code class="language-text">HTTP 200, 62774 bytes, 325 records
+first.quantityOnHand: 1581
+</code></pre>
+<pre><code class="language-bash">curl -i &#39;http://127.0.0.1:8080/api/v1/beer?beerName=IPA&amp;beerStyle=IPA&amp;showInventory=false&#39;
+</code></pre>
+<pre><code class="language-text">HTTP 200, 62944 bytes, 325 records
+
+first record:
+{&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;,&quot;beerStyle&quot;:&quot;IPA&quot;,&quot;createdDate&quot;:null,&quot;id&quot;:&quot;000212bc-6178-4e38-b48b-b26da298bb2e&quot;,&quot;price&quot;:10,&quot;quantityOnHand&quot;:null,&quot;upc&quot;:&quot;1581&quot;,&quot;updateDate&quot;:null,&quot;version&quot;:0}
+</code></pre>
+<p>The <code>showInventory=false</code> response is slightly larger in bytes (62944 vs 62774) because each <code>quantityOnHand</code> renders as <code>null</code> instead of a number. The record sets are identical across all three variants, confirming the flag reshapes the response only.</p>
+<h5>Regression checks</h5>
+<pre><code class="language-text">GET /api/v1/beer?beerName=IPA   -&gt; 200, 351 records (matches SQL baseline)
+GET /api/v1/beer?beerStyle=IPA  -&gt; 200, 563 records (matches SQL baseline)
+GET /api/v1/beer                -&gt; 200, 2428 records, 473314 bytes
+GET /api/v1/customer            -&gt; 200 with the three customers
+POST /api/v1/beer (valid)       -&gt; 201, Location: /api/v1/beer/cda2e110-55c1-42da-a743-4ef1d881e309
+POST /api/v1/beer (invalid)     -&gt; 400 [{&quot;beerStyle&quot;:&quot;must not be null&quot;},{&quot;beerName&quot;:&quot;must not be blank&quot;},{&quot;upc&quot;:&quot;must not be blank&quot;}]
+</code></pre>
+<h5>Live counts vs test expectations</h5>
+<p>Every live count is exactly 15 higher than the corresponding <code>BeerControllerIT</code> expectation (2428 vs 2413 all, 351 vs 336 name, 563 vs 548 style, 325 vs 310 combined). The offset is the 15 beers POSTed during the branch 90–92 sessions, all of which have <code>IPA</code> in the name and <code>IPA</code> style, so they appear in every filter&#39;s result set. Each live count matches the direct SQL count exactly, confirming the derived queries implement the intended predicates.</p>
+<h5>Shutdown</h5>
+<p>Spring Boot was stopped first, then MariaDB was shut down over its socket:</p>
+<pre><code class="language-bash">mariadb-admin \
+  --socket=/data/data/com.termux/files/usr/var/run/mysqld.sock \
+  --user=root shutdown
+</code></pre>
+<p>Ports 8080 and 3306 were verified closed (via <code>/dev/tcp</code> checks; <code>netstat</code> in this Termux environment does not support <code>AF INET</code>), and no <code>java</code> or <code>mariadbd</code> processes remained.</p>
+<h2>Branch 94: paging parameters</h2>
+<h3><code>94-page-add-parameters</code></h3>
+<p>Branch created locally from <code>origin/94-page-add-parameters</code> (HEAD <code>85cdb07 Merge branch &#39;93-query-complete-search-params&#39; into 94-page-add-parameters</code>). This branch introduces paging as a new layer, following the same incremental pattern used for name and style search: parameters first, behavior later.</p>
+<h4>Changes</h4>
+<p><code>BeerController.listBeers</code> accepts two more optional request parameters and passes all five to the service:</p>
+<pre><code class="language-java">public List&lt;BeerDTO&gt; listBeers(@RequestParam(required = false) String beerName,
+                               @RequestParam(required = false) BeerStyle beerStyle,
+                               @RequestParam(required = false) Boolean showInventory,
+                               @RequestParam(required = false) Integer pageNumber,
+                               @RequestParam(required = false) Integer pageSize){
+    return beerService.listBeers(beerName, beerStyle, showInventory, pageNumber, pageSize);
+}
+</code></pre>
+<p>The five-argument signature now flows through <code>BeerService</code>, <code>BeerServiceImpl</code>, and <code>BeerServiceJPA</code>.</p>
+<h4>Important: paging is not implemented yet</h4>
+<p>Only the signature changed. <code>BeerServiceJPA.listBeers</code> still runs the branch-93 search branches and returns every matching row — <code>pageNumber</code> and <code>pageSize</code> are accepted and immediately ignored:</p>
+<pre><code class="language-java">public List&lt;BeerDTO&gt; listBeers(String beerName, BeerStyle beerStyle, Boolean showInventory,
+                               Integer pageNumber, Integer pageSize) {
+    ...
+    beerList = listBeersByNameAndStyle(beerName, beerStyle);
+    ...
+    return beerList.stream().map(beerMapper::beerToBeerDto).collect(Collectors.toList());
+}
+</code></pre>
+<p>There is no <code>Pageable</code>, no <code>PageRequest</code>, and no slice on <code>beerList</code>. No repository method returns a <code>Page</code>/<code>Slice</code> either. So <code>?pageNumber=2&amp;pageSize=50</code> currently returns the full result set, exactly as it would without those parameters.</p>
+<h4>Tests</h4>
+<ul>
+<li><code>BeerControllerIT</code> gained <code>tesListBeersByStyleAndNameShowInventoryTruePage2</code>, requesting <code>beerName=IPA&amp;beerStyle=IPA&amp;showInventory=true&amp;pageNumber=2&amp;pageSize=50</code> and expecting <code>$.size()</code> of 50 with a non-null first <code>quantityOnHand</code>.</li>
+<li>All existing controller and integration tests were mechanically updated to the five-argument signature, using <code>1, 25</code> as placeholder values.</li>
+<li>These placeholder values are never asserted; they exist only because the signature requires them, so the updates do not test paging behavior.</li>
+</ul>
+<h4>Verified failure</h4>
+<p>The new paging test was run to confirm the gap is real and not just a code-reading inference:</p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerControllerIT#tesListBeersByStyleAndNameShowInventoryTruePage2
+</code></pre>
+<pre><code class="language-text">[ERROR] BeerControllerIT.tesListBeersByStyleAndNameShowInventoryTruePage2:69 JSON path &quot;$.size()&quot;
+Expected: is &lt;50&gt;
+     but: was &lt;310&gt;
+
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+</code></pre>
+<p>The endpoint returned all 310 combined-matching records instead of the requested 50-row page, confirming the parameters are threaded but not applied. This is the expected state for this branch; the paging behavior is presumably the subject of the next branch.</p>
+<h4>Test environment note</h4>
+<p>This test ran against the H2/in-memory test datasource (the <code>@SpringBootTest</code> IT context bootstraps and seeds its own data), not the MariaDB <code>localmysql</code> profile. That is why the count is 310 — matching the branch-93 test expectation — rather than the live 325. MariaDB was not required and was not started for this run.</p>
+<h2>Branch 95: create page request</h2>
+<h3><code>95-page-create-page-request</code></h3>
+<p>Branch created locally from <code>origin/95-page-create-page-request</code> (HEAD <code>b2f6b7b Merge branch &#39;94-page-add-parameters&#39; into 95-page-create-page-request</code>). Exactly one file changed: <code>BeerServiceJPA.java</code>, +31/−1.</p>
+<h4>Added constants</h4>
+<pre><code class="language-java">private static final int DEFAULT_PAGE = 0;
+private static final int DEFAULT_PAGE_SIZE = 25;
+</code></pre>
+<h4>Added <code>buildPageRequest</code></h4>
+<pre><code class="language-java">public PageRequest buildPageRequest(Integer pageNumber, Integer pageSize) {
+    int queryPageNumber;
+    int queryPageSize;
+
+    if (pageNumber != null &amp;&amp; pageNumber &gt; 0) {
+        queryPageNumber = pageNumber - 1;
+    } else {
+        queryPageNumber = DEFAULT_PAGE;
+    }
+
+    if (pageSize == null) {
+        queryPageSize = DEFAULT_PAGE_SIZE;
+    } else {
+        if (pageSize &gt; 1000) {
+            queryPageSize = 1000;
+        } else {
+            queryPageSize = pageSize;
+        }
+    }
+
+    return PageRequest.of(queryPageNumber, queryPageSize);
+}
+</code></pre>
+<p>Three policies are encoded here:</p>
+<ul>
+<li><strong>1-based to 0-based translation.</strong> The public API is 1-based (<code>pageNumber=2</code> means the second page) while Spring Data is 0-based, so the method subtracts 1. A null, zero, or negative <code>pageNumber</code> falls back to <code>DEFAULT_PAGE</code> (0).</li>
+<li><strong>Page-size ceiling of 1000.</strong> Any <code>pageSize</code> above 1000 is clamped, bounding how much a single request can load.</li>
+<li><strong>Defaults.</strong> Omitted <code>pageNumber</code> yields page 0 and omitted <code>pageSize</code> yields 25.</li>
+</ul>
+<p>An unguarded edge remains: <code>pageSize=0</code> or a negative value passes both checks and reaches <code>PageRequest.of(...)</code>, which requires a size of at least 1 and throws <code>IllegalArgumentException</code>. That would surface as a 500 rather than a clamped value or a 400.</p>
+<h4>Not yet applied</h4>
+<p><code>listBeers</code> builds the request and then never uses it:</p>
+<pre><code class="language-java">PageRequest pageRequest = buildPageRequest(pageNumber, pageSize);
+
+List&lt;Beer&gt; beerList;
+
+if(StringUtils.hasText(beerName) &amp;&amp; beerStyle == null) {
+    beerList = listBeersByName(beerName);
+} else if ...
+</code></pre>
+<p>The local variable is unused, and none of the repository methods take a <code>Pageable</code> or return <code>Page</code>/<code>Slice</code> — they still return <code>List&lt;Beer&gt;</code>. So this branch constructs the paging tool without connecting it to any query, and the endpoint&#39;s output is unchanged from branch 94.</p>
+<h4>Verified failure</h4>
+<p>The same branch-94 paging test was rerun to confirm the behavior is identical:</p>
+<pre><code class="language-bash">mvn -o test -Dtest=BeerControllerIT#tesListBeersByStyleAndNameShowInventoryTruePage2
+</code></pre>
+<pre><code class="language-text">[ERROR] BeerControllerIT.tesListBeersByStyleAndNameShowInventoryTruePage2:69 JSON path &quot;$.size()&quot;
+Expected: is &lt;50&gt;
+     but: was &lt;310&gt;
+</code></pre>
+<p>Still 310, exactly as on branch 94. The <code>PageRequest</code> exists but has no effect on the response. Again this ran on the in-memory test datasource, so no MariaDB was started.</p>
+<h2>Branch 109: optimistic locking demo</h2>
+<h3><code>109-lock-demo-optimistic</code></h3>
+<p>Checked out from <code>origin/109-lock-demo-optimistic</code> (HEAD <code>889c1a2 Merge branch &#39;108-rel-one-to-one-pers&#39; into 109-lock-demo-optimistic</code>). The local <code>application-localmysql.properties</code> modification (<code>spring.docker.compose.enabled=false</code>) carried across the checkout unchanged because the file is identical on both branches.</p>
+<p>The branch diff against its parent 108 is one file and one test:</p>
+<pre><code class="language-java">@Disabled // just for demo purposes
+@Test
+void testUpdateBeerBadVersion() throws Exception {
+    Beer beer = beerRepository.findAll().get(0);
+    BeerDTO beerDTO = beerMapper.beerToBeerDto(beer);
+    beerDTO.setBeerName(&quot;Updated Name&quot;);
+
+    mockMvc.perform(put(BeerController.BEER_PATH_ID, beer.getId())
+            ... .content(objectMapper.writeValueAsString(beerDTO)))
+        .andExpect(status().isNoContent());
+
+    beerDTO.setBeerName(&quot;Updated Name 2&quot;);
+    // second PUT with the SAME (now stale) DTO version
+    mockMvc.perform(put(BeerController.BEER_PATH_ID, beer.getId())
+            ... .content(objectMapper.writeValueAsString(beerDTO)))
+        .andExpect(status().isNoContent());
+}
+</code></pre>
+<h4>What the demo shows (and why it expects 204 twice)</h4>
+<p>The test sends a stale <code>version</code> in the second PUT body and still expects <code>204 No Content</code> — because <code>BeerServiceJPA.updateBeerById</code> ignores the client-supplied version entirely:</p>
+<pre><code class="language-java">beerRepository.findById(beerId).ifPresentOrElse(foundBeer -&gt; {
+    foundBeer.setBeerName(beer.getBeerName());
+    foundBeer.setBeerStyle(beer.getBeerStyle());
+    foundBeer.setUpc(beer.getUpc());
+    foundBeer.setPrice(beer.getPrice());
+    foundBeer.setQuantityOnHand(beer.getQuantityOnHand());
+    ...  beerRepository.save(foundBeer)
+</code></pre>
+<p>No <code>foundBeer.setVersion(...)</code> — the update path is load-and-copy. The entity being saved always carries the version that was just loaded from the database, so a client-sent version can never participate in the optimistic-lock check. PUT responses are <code>204</code> with no body, so a well-behaved client would have to re-GET to learn the current version anyway. The <code>@Disabled</code> annotation keeps this &quot;nothing fails&quot; demonstration out of the normal test run.</p>
+<h4>Runtime evidence (live MariaDB run)</h4>
+<p>Environment notes: <code>restdb</code> was already migrated to Flyway version 5 (order, category, shipment tables — applied by earlier branch 96–108 sessions), so this run required no new migrations: <code>Successfully validated 5 migrations</code> / <code>Schema \</code>restdb` is up to date.<code>Startup:</code>localmysql<code>profile, Hikari</code>RestDB-Pool<code>, Tomcat 8080, </code>Started Spring7RestMvcApplication in 22.229 seconds`. Dataset: 2429 beers (CSV bootstrap plus prior-session POSTs), 3 customers.</p>
+<p>The beer listing now returns a Spring Data <code>Page</code> JSON (paging landed in branches 96–98), e.g. <code>{&quot;content&quot;:[...],&quot;totalElements&quot;:2429,&quot;size&quot;:25,...}</code>, and the paged query carries <code>order by b1_0.beer_name limit ?</code> with bind <code>25</code>. Boot logged the known <code>PageImpl</code> serialization warning: the page JSON shape is not guaranteed stable.</p>
+<p>Optimistic-lock demo on beer <code>000212bc-6178-4e38-b48b-b26da298bb2e</code> (GUBNA Imperial IPA, version 0):</p>
+<pre><code class="language-text">PUT #1 body version=0  -&gt; 204 ; GET -&gt; version: 1 (name &quot;Lock Demo 1&quot;)
+PUT #2 body version=0  -&gt; 204 ; GET -&gt; version: 2 (name &quot;Lock Demo 2&quot;)   &lt;- stale version ignored
+</code></pre>
+<p>Hibernate bind values prove the WHERE predicate used the server-loaded version, not the client&#39;s:</p>
+<pre><code class="language-text">PUT #1: binding parameter (7:INTEGER) &lt;- [1]   (new version)
+        binding parameter (9:INTEGER) &lt;- [0]   (WHERE version = 0)
+PUT #2: binding parameter (7:INTEGER) &lt;- [2]
+        binding parameter (9:INTEGER) &lt;- [1]   &lt;- NOT the stale 0 from the request body
+</code></pre>
+<h5>Triggering a real conflict</h5>
+<p>Twelve concurrent PUTs against the same beer, each with <code>version: 99</code> in the body:</p>
+<pre><code class="language-text">4 x HTTP 204, 8 x HTTP 500
+final: beerName &quot;Race 1&quot;, version 6   (2 + 4 successful increments)
+</code></pre>
+<p>The 500s are genuine optimistic-lock failures:</p>
+<pre><code class="language-text">org.springframework.orm.ObjectOptimisticLockingFailureException:
+Unexpected row count (expected row count 1 but was 0)
+[update beer set beer_name=?,beer_style=?,price=?,quantity_on_hand=?,upc=?,update_date=?,version=?
+ where id=? and version=?] for entity [Beer with id &#39;000212bc-...&#39;]
+Caused by: org.hibernate.StaleStateException
+</code></pre>
+<p>Eight <code>ObjectOptimisticLockingFailureException</code> / eight <code>StaleStateException</code> occurrences in the log, matching the eight 500s. The race: concurrent requests load version N; the first flush increments it; the others&#39; flush UPDATE ... WHERE version=N matches zero rows and Hibernate throws. The body&#39;s <code>version:99</code> was once again irrelevant.</p>
+<p>Two operational observations:</p>
+<ul>
+<li>The exception has no handler in <code>CustomErrorController</code> (which covers only <code>TransactionSystemException</code> and <code>MethodArgumentNotValidException</code>), and no <code>@ResponseStatus</code> applies, so clients get an unhelpful HTTP 500. A production API would map <code>OptimisticLockingFailureException</code> to 409 Conflict — likely a follow-up branch.</li>
+<li><code>updateBeerById</code> runs <code>findById</code> and <code>save</code> in separate repository transactions (the service is not <code>@Transactional</code>), which widens the window in which this conflict can occur compared to a single transactional read-modify-write.</li>
+</ul>
+<h5>Cleanup and regression</h5>
+<p>The demo record was restored via <code>PATCH {&quot;beerName&quot;:&quot;GUBNA Imperial IPA&quot;}</code> → 204 (version now 7). Regressions after the run: <code>GET /api/v1/customer</code> 200; paged listing with <code>?pageNumber=1&amp;pageSize=5</code> returned <code>size:5, totalElements:2429</code>. Spring Boot was stopped, MariaDB shut down via socket, ports 8080/3306 verified closed, no <code>java</code>/<code>mariadbd</code> processes remained.</p>
+<h2>Branch 110: Spring Security Maven dependency</h2>
+<h3><code>110-spring-sec-maven-deps</code></h3>
+<p>Checked out from <code>origin/110-spring-sec-maven-deps</code> (HEAD <code>cf1a0d6 Merge branch &#39;109-lock-demo-optimistic&#39; into 110-spring-sec-maven-deps</code>). The local <code>application-localmysql.properties</code> modification carried across unchanged.</p>
+<p>The entire branch diff against 109 is four lines in <code>pom.xml</code>:</p>
+<pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-security&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>No Java source, no configuration, no tests changed. This is the first step of the Spring Security arc (110–116): add the dependency, then configure users, then lock down tests.</p>
+<h4>Why a dependency-only branch matters</h4>
+<p>Adding <code>spring-boot-starter-security</code> with zero configuration triggers Spring Boot&#39;s security auto-configuration, which immediately changes runtime behavior:</p>
+<ul>
+<li>A default <code>SecurityFilterChain</code> is registered that requires authentication for <strong>every</strong> endpoint.</li>
+<li>A single in-memory user named <code>user</code> is created with a <strong>randomly generated password</strong> printed to the startup log.</li>
+<li>Form login and HTTP Basic are both enabled by default.</li>
+</ul>
+<h4>Runtime evidence</h4>
+<p>Started with the usual command against the already-migrated <code>restdb</code> (Flyway version 5, <code>Successfully validated 5 migrations</code>, <code>No migration necessary</code>). Maven downloaded the new security artifacts (<code>spring-boot-starter-security 4.0.6</code>, <code>spring-security-config/core/crypto 7.0.5</code>) on first run.</p>
+<p>Startup log:</p>
+<pre><code class="language-text">Using generated security password: 253dfcab-7797-4570-a8ea-20cf39e1cb96
+Tomcat started on port 8080
+Started Spring7RestMvcApplication in 21.428 seconds
+</code></pre>
+<p>Unauthenticated access is now blocked:</p>
+<pre><code class="language-text">GET /api/v1/beer?pageNumber=1&amp;pageSize=2   -&gt; HTTP 401
+GET /api/v1/customer                        -&gt; HTTP 401
+</code></pre>
+<p>Authenticated access with the generated credentials works and paging is intact:</p>
+<pre><code class="language-text">curl -u user:253dfcab-7797-4570-a8ea-20cf39e1cb96 ...
+
+GET /api/v1/beer?pageNumber=1&amp;pageSize=2   -&gt; HTTP 200
+GET /api/v1/customer                        -&gt; HTTP 200
+body: {&quot;content&quot;:[{&quot;beerName&quot;:&quot;#001 Golden Amber Lager&quot;,...
+</code></pre>
+<p>Note the generated password changes on every restart, so it is only usable for local smoke testing. Subsequent branches (111+) replace this with explicit user/password configuration, and the MockMvc tests will need security context wiring (branches 114–116) since the default chain now rejects unauthenticated test requests.</p>
+<p>Spring Boot was stopped, MariaDB shut down via socket, ports 8080/3306 verified closed, no leftover processes.</p>
+</main>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>
