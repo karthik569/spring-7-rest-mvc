@@ -104,6 +104,74 @@ pre.mermaid {
   padding: 1.2rem .5rem;
 }
 pre.mermaid svg { max-width: 100%; height: auto; }
+.diagram-canvas {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 1em 0 2em;
+  overflow: hidden;
+}
+.diagram-toolbar {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .6rem;
+  background: var(--code-bg);
+  border-bottom: 1px solid var(--border);
+}
+.diagram-title {
+  font-size: .85rem;
+  color: var(--muted);
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diagram-toolbar button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 2rem;
+  padding: .15rem .45rem;
+  font-size: .95rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.diagram-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.diagram-zoom-label {
+  font-size: .8rem;
+  color: var(--muted);
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.diagram-viewport {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background:
+    radial-gradient(circle, var(--border) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--bg);
+}
+.diagram-viewport.expanded { height: 85vh; }
+.diagram-viewport.panning { cursor: grabbing; }
+.diagram-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.diagram-stage pre.mermaid {
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  overflow: visible;
+}
+.diagram-stage pre.mermaid svg { max-width: none; }
 </style>
 </head>
 <body>
@@ -2339,11 +2407,1325 @@ body: {&quot;content&quot;:[{&quot;beerName&quot;:&quot;#001 Golden Amber Lager&
 </code></pre>
 <p>Note the generated password changes on every restart, so it is only usable for local smoke testing. Subsequent branches (111+) replace this with explicit user/password configuration, and the MockMvc tests will need security context wiring (branches 114–116) since the default chain now rejects unauthenticated test requests.</p>
 <p>Spring Boot was stopped, MariaDB shut down via socket, ports 8080/3306 verified closed, no leftover processes.</p>
+<h2>Appendix: Per-Branch Diagrams</h2>
+<p>One diagram per local branch, generated from <code>git diff prev...branch</code> (changed files grouped by area) and the branch's non-merge commit subjects. All diagrams are zoomable: scroll wheel to zoom, drag to pan, buttons in the toolbar.</p>
+<h3 id="br-3-lombok-constructors"><code>3-lombok-constructors</code></h3>
+<p>vs <code>master</code> — 6 file(s) changed: Refactor package name · remove lombok ver</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>remove lombok ver<br/>adding annotation processor for Lombok<br/>adding builder example"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph M["src/main/java"]
+    M0["A controller/BeerController.java"]
+    M1["A model/Beer.java"]
+    M2["A model/BeerStyle.java"]
+    M3["A services/BeerService.java"]
+    M4["A services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-4-lombok-logging"><code>4-lombok-logging</code></h3>
+<p>vs <code>3-lombok-constructors</code> — 4 file(s) changed: Refactor package name · adding lombok logging example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>adding lombok logging example"]
+  subgraph R["resources"]
+    R0["M res: application.properties"]
+  end
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerServiceImpl.java"]
+  end
+  subgraph T["src/test"]
+    T0["A test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-5-list-beer"><code>5-list-beer</code></h3>
+<p>vs <code>4-lombok-logging</code> — 3 file(s) changed: Refactor package name · adding list example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>adding list example"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-6-get-by-id"><code>6-get-by-id</code></h3>
+<p>vs <code>5-list-beer</code> — 1 file(s) changed: adding get beer by id</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding get beer by id"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+  end
+</pre>
+<h3 id="br-7-assn-get-customer"><code>7-assn-get-customer</code></h3>
+<p>vs <code>6-get-by-id</code> — 4 file(s) changed: adding customer example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding customer example"]
+  subgraph M["src/main/java"]
+    M0["A controller/CustomerController.java"]
+    M1["A model/Customer.java"]
+    M2["A services/CustomerService.java"]
+    M3["A services/CustomerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-8-spring-boot-devtools"><code>8-spring-boot-devtools</code></h3>
+<p>vs <code>7-assn-get-customer</code> — 1 file(s) changed: update scope of devtools · adding dev tools</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update scope of devtools<br/>adding dev tools"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+</pre>
+<h3 id="br-9-http-post"><code>9-http-post</code></h3>
+<p>vs <code>8-spring-boot-devtools</code> — 3 file(s) changed: adding http post example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding http post example"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-10-response-header"><code>10-response-header</code></h3>
+<p>vs <code>9-http-post</code> — 1 file(s) changed: adding http response header</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding http response header"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+  end
+</pre>
+<h3 id="br-11-http-post-customer"><code>11-http-post-customer</code></h3>
+<p>vs <code>10-response-header</code> — 4 file(s) changed: adding http POST for customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding http POST for customer"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomerController.java"]
+    M1["M services/BeerServiceImpl.java"]
+    M2["M services/CustomerService.java"]
+    M3["M services/CustomerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-12-http-put"><code>12-http-put</code></h3>
+<p>vs <code>11-http-post-customer</code> — 3 file(s) changed: adding put for beer object</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding put for beer object"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-13-http-put-customer"><code>13-http-put-customer</code></h3>
+<p>vs <code>12-http-put</code> — 4 file(s) changed: adding PUT for Customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding PUT for Customer"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomerController.java"]
+    M1["M services/BeerServiceImpl.java"]
+    M2["M services/CustomerService.java"]
+    M3["M services/CustomerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-14-http-delete"><code>14-http-delete</code></h3>
+<p>vs <code>13-http-put-customer</code> — 3 file(s) changed: adding delete</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding delete"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-15-http-delete-customer"><code>15-http-delete-customer</code></h3>
+<p>vs <code>14-http-delete</code> — 3 file(s) changed: adding delete customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding delete customer"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomerController.java"]
+    M1["M services/CustomerService.java"]
+    M2["M services/CustomerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-16-http-patch"><code>16-http-patch</code></h3>
+<p>vs <code>15-http-delete-customer</code> — 3 file(s) changed: adding patch example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding patch example"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-17-http-patch-customer"><code>17-http-patch-customer</code></h3>
+<p>vs <code>16-http-patch</code> — 3 file(s) changed: adding test of Patch customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding test of Patch customer"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomerController.java"]
+    M1["M services/CustomerService.java"]
+    M2["M services/CustomerServiceImpl.java"]
+  end
+</pre>
+<h3 id="br-18-mock-mvc-config"><code>18-mock-mvc-config</code></h3>
+<p>vs <code>17-http-patch-customer</code> — 2 file(s) changed: update package name from WebMvcTest · Update of deprecated @MockBean to @MockitoBean</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update package name from WebMvcTest<br/>Update of deprecated @MockBean to @MockitoBean<br/>adding mockmvc config"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-19-mock-mvc-using-mockito"><code>19-mock-mvc-using-mockito</code></h3>
+<p>vs <code>18-mock-mvc-config</code> — 1 file(s) changed: adding mockito config</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding mockito config"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-20-mock-mvc-json-path-matchers"><code>20-mock-mvc-json-path-matchers</code></h3>
+<p>vs <code>19-mock-mvc-using-mockito</code> — 1 file(s) changed: adding json path matchers example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding json path matchers example"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-22-mock-mvc-assn-get-customer-test"><code>22-mock-mvc-assn-get-customer-test</code></h3>
+<p>vs <code>20-mock-mvc-json-path-matchers</code> — 2 file(s) changed: update package name from WebMvcTest · update to use MockitoBean</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update package name from WebMvcTest<br/>update to use MockitoBean<br/>adding tests for customer<br/>adding tests for customer"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+    T1["A test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-23-mock-mvc-using-jackson"><code>23-mock-mvc-using-jackson</code></h3>
+<p>vs <code>22-mock-mvc-assn-get-customer-test</code> — 1 file(s) changed: Update for Jackson 3.x · adding jackson example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Update for Jackson 3.x<br/>adding jackson example"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-24-mock-mvc-create-beer"><code>24-mock-mvc-create-beer</code></h3>
+<p>vs <code>23-mock-mvc-using-jackson</code> — 2 file(s) changed: Fix import · Add @JsonDeserialize annotation to Beer class</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Fix import<br/>Add @JsonDeserialize annotation to Beer class<br/>adding create beer test"]
+  subgraph M["src/main/java"]
+    M0["M model/Beer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-25-mock-mvc-create-customer"><code>25-mock-mvc-create-customer</code></h3>
+<p>vs <code>24-mock-mvc-create-beer</code> — 2 file(s) changed: Fix import · Add @JsonDeserialize annotation to Customer class</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Fix import<br/>Add @JsonDeserialize annotation to Customer class<br/>adding test for create customer"]
+  subgraph M["src/main/java"]
+    M0["M model/Customer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-26-mock-mvc-update-beer"><code>26-mock-mvc-update-beer</code></h3>
+<p>vs <code>25-mock-mvc-create-customer</code> — 1 file(s) changed: adding test for update of beer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding test for update of beer"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-27-mock-mvc-update-customer"><code>27-mock-mvc-update-customer</code></h3>
+<p>vs <code>26-mock-mvc-update-beer</code> — 1 file(s) changed: adding test for update of customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding test for update of customer"]
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-28-mock-mvc-delete-beer"><code>28-mock-mvc-delete-beer</code></h3>
+<p>vs <code>27-mock-mvc-update-customer</code> — 1 file(s) changed: adding test for delete beer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding test for delete beer"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-30-mock-mvc-test-patch-beer"><code>30-mock-mvc-test-patch-beer</code></h3>
+<p>vs <code>28-mock-mvc-delete-beer</code> — 4 file(s) changed: Add @ExtendWith(MockitoExtension.class) to BeerControllerTest and annotate fields with @JsonProperty in Beer and Customer classes · Add @ExtendWith(MockitoExtension.class) to CustomerControllerTest</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Add @ExtendWith(MockitoExtension.class) to BeerControllerTest and annotate fields with @JsonProperty in Beer and Customer classes<br/>Add @ExtendWith(MockitoExtension.class) to CustomerControllerTest<br/>adding test of Patch beer<br/>adding test for delete customer"]
+  subgraph M["src/main/java"]
+    M0["M model/Beer.java"]
+    M1["M model/Customer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+    T1["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-31-mock-mvc-test-patch-customer"><code>31-mock-mvc-test-patch-customer</code></h3>
+<p>vs <code>30-mock-mvc-test-patch-beer</code> — 1 file(s) changed: Fix error in test · adding test of patch customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Fix error in test<br/>adding test of patch customer"]
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-35-mock-mvc-custom-exception"><code>35-mock-mvc-custom-exception</code></h3>
+<p>vs <code>31-mock-mvc-test-patch-customer</code> — 5 file(s) changed: adding custom exception · refactor to use URI builder</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding custom exception<br/>refactor to use URI builder<br/>refactoring to constants for URLs"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M controller/CustomerController.java"]
+    M2["A controller/NotFoundException.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+    T1["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-36-mock-mvc-exception-handler-method"><code>36-mock-mvc-exception-handler-method</code></h3>
+<p>vs <code>35-mock-mvc-custom-exception</code> — 1 file(s) changed: adding exception handler</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding exception handler"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+  end
+</pre>
+<h3 id="br-37-mock-mvc-controller-advice"><code>37-mock-mvc-controller-advice</code></h3>
+<p>vs <code>36-mock-mvc-exception-handler-method</code> — 3 file(s) changed: adding controller advice example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding controller advice example"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["A controller/ExceptionController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-37-mock-mvc-response-status-annotation"><code>37-mock-mvc-response-status-annotation</code></h3>
+<p>vs <code>36-mock-mvc-exception-handler-method</code> — 4 file(s) changed: adding response status example · adding controller advice example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding response status example<br/>adding controller advice example"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["A controller/ExceptionController.java"]
+    M2["M controller/NotFoundException.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-38-exception-optional"><code>38-exception-optional</code></h3>
+<p>vs <code>37-mock-mvc-response-status-annotation</code> — 8 file(s) changed: adding use of Optional</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding use of Optional"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M controller/CustomerController.java"]
+    M2["M services/BeerService.java"]
+    M3["M services/BeerServiceImpl.java"]
+    M4["M services/CustomerService.java"]
+    M5["M services/CustomerServiceImpl.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+    T1["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-39-dto-refactor"><code>39-dto-refactor</code></h3>
+<p>vs <code>38-exception-optional</code> — 11 file(s) changed: Fixing merge errors · Refactor: update @JsonDeserialize annotations to use DTO-specific builders and adjust imports in related tests</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Fixing merge errors<br/>Refactor: update @JsonDeserialize annotations to use DTO-specific builders and adjust imports in related tests<br/>refactor to DTOs"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M controller/CustomerController.java"]
+    M2["D controller/ExceptionController.java"]
+    M3["R091 model/Beer.java"]
+    M4["R085 model/Customer.java"]
+    M5["M services/BeerService.java"]
+    M6["M services/BeerServiceImpl.java"]
+    M7["M services/CustomerService.java"]
+    M8["M services/CustomerServiceImpl.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+    T1["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-41-adding-entities"><code>41-adding-entities</code></h3>
+<p>vs <code>39-dto-refactor</code> — 4 file(s) changed: Refactor package name · Refactor package name</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>Refactor package name<br/>update deps for Spring Boot 4<br/>adding JPA Entities"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph M["src/main/java"]
+    M0["A entities/Beer.java"]
+    M1["A entities/Customer.java"]
+    M2["M model/CustomerDTO.java"]
+  end
+</pre>
+<h3 id="br-41-uuid-id-generation"><code>41-uuid-id-generation</code></h3>
+<p>vs <code>39-dto-refactor</code> — 4 file(s) changed: Refactor package name · Refactor package name</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>Refactor package name<br/>update deps for Spring Boot 4<br/>update to use uuidgenerator"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph M["src/main/java"]
+    M0["A entities/Beer.java"]
+    M1["A entities/Customer.java"]
+    M2["M model/CustomerDTO.java"]
+  end
+</pre>
+<h3 id="br-43-spring-data-jpa-repos"><code>43-spring-data-jpa-repos</code></h3>
+<p>vs <code>41-uuid-id-generation</code> — 3 file(s) changed: Refactor package name · Refactor package name</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>Refactor package name<br/>adding JPA Repositories"]
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+    M1["A repositories/BeerRepository.java"]
+    M2["A repositories/CustomerRepository.java"]
+  end
+</pre>
+<h3 id="br-44-JPA-test-splice"><code>44-JPA-test-splice</code></h3>
+<p>vs <code>43-spring-data-jpa-repos</code> — 2 file(s) changed: Refactor package name · adding JPA tests</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>adding JPA tests"]
+  subgraph T["src/test"]
+    T0["A test: repositories/BeerRepositoryTest.java"]
+    T1["A test: repositories/CustomerRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-45-mapstruct-deps"><code>45-mapstruct-deps</code></h3>
+<p>vs <code>44-JPA-test-splice</code> — 1 file(s) changed: Update: configure MapStruct version in pom.xml , update Java compiler source/target to 25, and remove outdated Lombok-related configuration · Update UUID Generator to @UuidGenerator</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Update: configure MapStruct version in pom.xml , update Java compiler source/target to 25, and remove outdated Lombok-related configuration<br/>Update UUID Generator to @UuidGenerator<br/>updating java version in compiler config<br/>adding mapstruct deps and config"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+</pre>
+<h3 id="br-46-mappers"><code>46-mappers</code></h3>
+<p>vs <code>45-mapstruct-deps</code> — 2 file(s) changed: Refactor package name · Adding Mappers</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>Adding Mappers"]
+  subgraph M["src/main/java"]
+    M0["A mappers/BeerMapper.java"]
+    M1["A mappers/CustomerMapper.java"]
+  end
+</pre>
+<h3 id="br-47-bootstrap-jpa"><code>47-bootstrap-jpa</code></h3>
+<p>vs <code>46-mappers</code> — 2 file(s) changed: Refactor package name · Fix failing tests with UUID load</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>Fix failing tests with UUID load<br/>adding jpa bootstrap"]
+  subgraph M["src/main/java"]
+    M0["A bootstrap/BootstrapData.java"]
+  end
+  subgraph T["src/test"]
+    T0["A test: bootstrap/BootstrapDataTest.java"]
+  end
+</pre>
+<h3 id="br-48-jpa-services"><code>48-jpa-services</code></h3>
+<p>vs <code>47-bootstrap-jpa</code> — 2 file(s) changed: creating initial JPA services</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: creating initial JPA services"]
+  subgraph M["src/main/java"]
+    M0["A services/BeerServiceJPA.java"]
+    M1["A services/CustomerServiceJPA.java"]
+  end
+</pre>
+<h3 id="br-49-get-operations"><code>49-get-operations</code></h3>
+<p>vs <code>48-jpa-services</code> — 1 file(s) changed: JPA Get Operations</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: JPA Get Operations"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+</pre>
+<h3 id="br-50-controller-integration-test"><code>50-controller-integration-test</code></h3>
+<p>vs <code>49-get-operations</code> — 1 file(s) changed: testing controller list operation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: testing controller list operation"]
+  subgraph T["src/test"]
+    T0["A test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-51-test-for-expected-exception"><code>51-test-for-expected-exception</code></h3>
+<p>vs <code>50-controller-integration-test</code> — 1 file(s) changed: adding expected exception</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding expected exception"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-52-jpa-customer-get-ops"><code>52-jpa-customer-get-ops</code></h3>
+<p>vs <code>51-test-for-expected-exception</code> — 2 file(s) changed: adding customer get operations</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding customer get operations"]
+  subgraph M["src/main/java"]
+    M0["M services/CustomerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["A test: controller/CustomerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-53-jpa-save-new-beer"><code>53-jpa-save-new-beer</code></h3>
+<p>vs <code>52-jpa-customer-get-ops</code> — 2 file(s) changed: impl save new beer JPA</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: impl save new beer JPA"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-54-jpa-update-existing-beer"><code>54-jpa-update-existing-beer</code></h3>
+<p>vs <code>53-jpa-save-new-beer</code> — 2 file(s) changed: impl update of beer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: impl update of beer"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-55-update-beer-not-found"><code>55-update-beer-not-found</code></h3>
+<p>vs <code>54-jpa-update-existing-beer</code> — 6 file(s) changed: fixing failing update test · handle update not found</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fixing failing update test<br/>handle update not found"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+    M3["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-56-jpa-delete-by-id"><code>56-jpa-delete-by-id</code></h3>
+<p>vs <code>55-update-beer-not-found</code> — 2 file(s) changed: fixing failing update test · jpa delete beer by id</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fixing failing update test<br/>jpa delete beer by id"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-57-jpa-delete-by-id-no-found"><code>57-jpa-delete-by-id-no-found</code></h3>
+<p>vs <code>56-jpa-delete-by-id</code> — 6 file(s) changed: fixing mockmvc test · adding delete by id not found logic</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fixing mockmvc test<br/>adding delete by id not found logic"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+    M3["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-58-assn-jpa-customer-operations"><code>58-assn-jpa-customer-operations</code></h3>
+<p>vs <code>57-jpa-delete-by-id-no-found</code> — 9 file(s) changed: Refactor package name · completing assignment for customer</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Refactor package name<br/>completing assignment for customer"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+    M3["M services/BeerServiceJPA.java"]
+    M4["M services/CustomerService.java"]
+    M5["M services/CustomerServiceImpl.java"]
+    M6["M services/CustomerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/CustomerControllerIT.java"]
+    T1["M test: controller/CustomerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-59-mvn-validation-deps"><code>59-mvn-validation-deps</code></h3>
+<p>vs <code>58-assn-jpa-customer-operations</code> — 1 file(s) changed: Add spring-boot-starter-validation-test dependency for testing · adding validation dependencies</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Add spring-boot-starter-validation-test dependency for testing<br/>adding validation dependencies"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+</pre>
+<h3 id="br-60-controller-binding-validation"><code>60-controller-binding-validation</code></h3>
+<p>vs <code>59-mvn-validation-deps</code> — 3 file(s) changed: adding controller binding validation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding controller binding validation"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M model/BeerDTO.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-61-custom-validation-error-handler"><code>61-custom-validation-error-handler</code></h3>
+<p>vs <code>60-controller-binding-validation</code> — 2 file(s) changed: Update package declaration in CustomErrorController · adding custom error handler</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Update package declaration in CustomErrorController<br/>adding custom error handler"]
+  subgraph M["src/main/java"]
+    M0["A controller/CustomErrorController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-62-custom-error-message"><code>62-custom-error-message</code></h3>
+<p>vs <code>61-custom-validation-error-handler</code> — 2 file(s) changed: adding custom error body</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding custom error body"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomErrorController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-63-assn-beer-dto-validation"><code>63-assn-beer-dto-validation</code></h3>
+<p>vs <code>62-custom-error-message</code> — 3 file(s) changed: completing beer dto validation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: completing beer dto validation"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M model/BeerDTO.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-64-jpa-validation"><code>64-jpa-validation</code></h3>
+<p>vs <code>63-assn-beer-dto-validation</code> — 2 file(s) changed: adding JPA validation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding JPA validation"]
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-65-database-constraint-validation"><code>65-database-constraint-validation</code></h3>
+<p>vs <code>64-jpa-validation</code> — 2 file(s) changed: adding database constraint validation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding database constraint validation"]
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-66-controller-testing-with-jpa"><code>66-controller-testing-with-jpa</code></h3>
+<p>vs <code>65-database-constraint-validation</code> — 2 file(s) changed: Update ObjectMapper import in BeerControllerIT to use the tools.jackson package. · adding JPA violation Exception handler</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Update ObjectMapper import in BeerControllerIT to use the tools.jackson package.<br/>adding JPA violation Exception handler<br/>adding JPA controller test"]
+  subgraph M["src/main/java"]
+    M0["M controller/CustomErrorController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-67-jpa-violoation-error-data"><code>67-jpa-violoation-error-data</code></h3>
+<p>vs <code>66-controller-testing-with-jpa</code> — 0 file(s) changed: Revert adding error message data · adding error message data</p>
+<p><em>No file changes relative to 66-controller-testing-with-jpa.</em></p>
+<h3 id="br-68-jpa-validation-error-msg"><code>68-jpa-validation-error-msg</code></h3>
+<p>vs <code>67-jpa-violoation-error-data</code> — 1 file(s) changed: adding error message data</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding error message data"]
+  subgraph M["src/main/java"]
+    M0["M model/BeerDTO.java"]
+  end
+</pre>
+<h3 id="br-69-mysql-configuration"><code>69-mysql-configuration</code></h3>
+<p>vs <code>68-jpa-validation-error-msg</code> — 1 file(s) changed: adding init scripts for MySQL · adding init scripts for MySQL</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding init scripts for MySQL<br/>adding init scripts for MySQL"]
+  subgraph O["other"]
+    O0["A src/scripts/mysql-init.sql"]
+  end
+</pre>
+<h3 id="br-70-mysql-dependencies"><code>70-mysql-dependencies</code></h3>
+<p>vs <code>69-mysql-configuration</code> — 1 file(s) changed: update mysql dep to to change in Spring Boot 3.0.3 · adding deps for mysql</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update mysql dep to to change in Spring Boot 3.0.3<br/>adding deps for mysql<br/>update mysql dep to to change in Spring Boot 3.0.3<br/>adding deps for mysql"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+</pre>
+<h3 id="br-71-mysql-profile"><code>71-mysql-profile</code></h3>
+<p>vs <code>70-mysql-dependencies</code> — 1 file(s) changed: adding mysql local profile</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding mysql local profile"]
+  subgraph R["resources"]
+    R0["A res: application-localmysql.properties"]
+  end
+</pre>
+<h3 id="br-72-console-log-sql"><code>72-console-log-sql</code></h3>
+<p>vs <code>71-mysql-profile</code> — 1 file(s) changed: add log output of SQL</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: add log output of SQL"]
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+  end
+</pre>
+<h3 id="br-73-jpa-updates-for-mysql"><code>73-jpa-updates-for-mysql</code></h3>
+<p>vs <code>72-console-log-sql</code> — 3 file(s) changed: adding @jdbcTypeCode for UUID values with MySQL · updating JPA mappings</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding @jdbcTypeCode for UUID values with MySQL<br/>updating JPA mappings"]
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+    M1["M entities/Customer.java"]
+  end
+</pre>
+<h3 id="br-74-kikari-datasource-pool"><code>74-kikari-datasource-pool</code></h3>
+<p>vs <code>73-jpa-updates-for-mysql</code> — 1 file(s) changed: adding Hikari config</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding Hikari config"]
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+  end
+</pre>
+<h3 id="br-75-db-create-scripts"><code>75-db-create-scripts</code></h3>
+<p>vs <code>74-kikari-datasource-pool</code> — 1 file(s) changed: adding db script create properties</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding db script create properties"]
+  subgraph R["resources"]
+    R0["M res: application.properties"]
+  end
+</pre>
+<h3 id="br-76-flyway-deps"><code>76-flyway-deps</code></h3>
+<p>vs <code>75-db-create-scripts</code> — 2 file(s) changed: Add flyway starter for Spring Boot 4 · update mysql dep to to change in Spring Boot 3.0.3</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Add flyway starter for Spring Boot 4<br/>update mysql dep to to change in Spring Boot 3.0.3<br/>adding flyway deps"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph R["resources"]
+    R0["M res: application.properties"]
+  end
+</pre>
+<h3 id="br-77-flyway-intit-script"><code>77-flyway-intit-script</code></h3>
+<p>vs <code>76-flyway-deps</code> — 3 file(s) changed: Enable Flyway migrations in local MySQL configuration. · fix for change in hibernate schema validation</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Enable Flyway migrations in local MySQL configuration.<br/>fix for change in hibernate schema validation<br/>adding flyway init script"]
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+    R1["A res: db/migration/V1__init-mysql-database.sql"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+  end
+</pre>
+<h3 id="br-78-fly-add-column"><code>78-fly-add-column</code></h3>
+<p>vs <code>77-flyway-intit-script</code> — 2 file(s) changed: fix merge error · add db column using flyway</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix merge error<br/>add db column using flyway"]
+  subgraph R["resources"]
+    R0["A res: db/migration/V2__add-email-to-customer.sql"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/Customer.java"]
+  end
+</pre>
+<h3 id="br-79-beer-csv-data"><code>79-beer-csv-data</code></h3>
+<p>vs <code>78-fly-add-column</code> — 8 file(s) changed: Remove MySqlTest.java file · Fix package declaration in MySqlTest.java</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Remove MySqlTest.java file<br/>Fix package declaration in MySqlTest.java<br/>Update Testcontainers dependencies in pom.xml<br/>Fix merge error"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+    R1["M res: application.properties"]
+    R2["A res: csvdata/LICENSE"]
+    R3["A res: csvdata/README.md"]
+    R4["A res: csvdata/beers.csv"]
+  end
+  subgraph T["src/test"]
+    T0["A test: repositories/MySqlIT.java"]
+  end
+  subgraph O["other"]
+    O0["A compose.yaml"]
+  end
+</pre>
+<h3 id="br-80-beer-csv-pojo"><code>80-beer-csv-pojo</code></h3>
+<p>vs <code>79-beer-csv-data</code> — 2 file(s) changed: adding csv pojo</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding csv pojo"]
+  subgraph R["resources"]
+    R0["M res: csvdata/beers.csv"]
+  end
+  subgraph M["src/main/java"]
+    M0["A model/BeerCSVRecord.java"]
+  end
+</pre>
+<h3 id="br-81-mapping-with-OpenCSV"><code>81-mapping-with-OpenCSV</code></h3>
+<p>vs <code>80-beer-csv-pojo</code> — 2 file(s) changed: Update OpenCSV dependency to version 5.12.0 · update opencsv version</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Update OpenCSV dependency to version 5.12.0<br/>update opencsv version<br/>adding maven dep, initial OpenCSV mapping"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph M["src/main/java"]
+    M0["M model/BeerCSVRecord.java"]
+  end
+</pre>
+<h3 id="br-82-beer-csv-parse-service"><code>82-beer-csv-parse-service</code></h3>
+<p>vs <code>81-mapping-with-OpenCSV</code> — 6 file(s) changed: fix package names · adding csv load to bootstrap</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix package names<br/>adding csv load to bootstrap<br/>adding parse csv file service"]
+  subgraph M["src/main/java"]
+    M0["M bootstrap/BootstrapData.java"]
+    M1["M model/BeerCSVRecord.java"]
+    M2["A services/BeerCsvService.java"]
+    M3["A services/BeerCsvServiceImpl.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: bootstrap/BootstrapDataTest.java"]
+    T1["A test: services/BeerCsvServiceImplTest.java"]
+  end
+</pre>
+<h3 id="br-83-beer-csv-save-to-db"><code>83-beer-csv-save-to-db</code></h3>
+<p>vs <code>82-beer-csv-parse-service</code> — 0 file(s) changed</p>
+<p><em>No file changes relative to 82-beer-csv-parse-service.</em></p>
+<h3 id="br-84-hibernate-create-update-timestamp"><code>84-hibernate-create-update-timestamp</code></h3>
+<p>vs <code>83-beer-csv-save-to-db</code> — 1 file(s) changed: adding hibernate create and update timestamps</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding hibernate create and update timestamps"]
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+  end
+</pre>
+<h3 id="br-85-beer-csv-fix-integration-tests"><code>85-beer-csv-fix-integration-tests</code></h3>
+<p>vs <code>84-hibernate-create-update-timestamp</code> — 2 file(s) changed: fixing integration tests</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fixing integration tests"]
+  subgraph T["src/test"]
+    T0["M test: bootstrap/BootstrapDataTest.java"]
+    T1["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-86-query-test"><code>86-query-test</code></h3>
+<p>vs <code>85-beer-csv-fix-integration-tests</code> — 1 file(s) changed: fix merge error · adding integration test</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix merge error<br/>adding integration test"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-87-query-add-query-param"><code>87-query-add-query-param</code></h3>
+<p>vs <code>86-query-test</code> — 2 file(s) changed: adding query parameter</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding query parameter"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-88-query-refactor-service"><code>88-query-refactor-service</code></h3>
+<p>vs <code>87-query-add-query-param</code> — 5 file(s) changed: adding string param to beer service</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding string param to beer service"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+    M3["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-89-query-list-by-name"><code>89-query-list-by-name</code></h3>
+<p>vs <code>88-query-refactor-service</code> — 3 file(s) changed: adding spring data jpa method · refactor service</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding spring data jpa method<br/>refactor service"]
+  subgraph M["src/main/java"]
+    M0["M repositories/BeerRepository.java"]
+    M1["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-90-query-spring-data-jpa"><code>90-query-spring-data-jpa</code></h3>
+<p>vs <code>89-query-list-by-name</code> — 0 file(s) changed</p>
+<p><em>No file changes relative to 89-query-list-by-name.</em></p>
+<h3 id="br-91-query-complete-name-search"><code>91-query-complete-name-search</code></h3>
+<p>vs <code>90-query-spring-data-jpa</code> — 2 file(s) changed: completing name search</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: completing name search"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-92-query-beer-style-search"><code>92-query-beer-style-search</code></h3>
+<p>vs <code>91-query-complete-name-search</code> — 7 file(s) changed: adding beer style search</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding beer style search"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M repositories/BeerRepository.java"]
+    M2["M services/BeerService.java"]
+    M3["M services/BeerServiceImpl.java"]
+    M4["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-93-query-complete-search-params"><code>93-query-complete-search-params</code></h3>
+<p>vs <code>92-query-beer-style-search</code> — 7 file(s) changed: fix missing package from merge error · adding showInventory and complete search conditions</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix missing package from merge error<br/>adding showInventory and complete search conditions"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M repositories/BeerRepository.java"]
+    M2["M services/BeerService.java"]
+    M3["M services/BeerServiceImpl.java"]
+    M4["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-94-page-add-parameters"><code>94-page-add-parameters</code></h3>
+<p>vs <code>93-query-complete-search-params</code> — 6 file(s) changed: adding page parameters</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding page parameters"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M services/BeerService.java"]
+    M2["M services/BeerServiceImpl.java"]
+    M3["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+  end
+</pre>
+<h3 id="br-95-page-create-page-request"><code>95-page-create-page-request</code></h3>
+<p>vs <code>94-page-add-parameters</code> — 1 file(s) changed: build page request</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: build page request"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+</pre>
+<h3 id="br-local-96"><code>local-96</code></h3>
+<p>vs <code>95-page-create-page-request</code> — 8 file(s) changed: refactoring to implement paging</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: refactoring to implement paging"]
+  subgraph M["src/main/java"]
+    M0["M controller/BeerController.java"]
+    M1["M repositories/BeerRepository.java"]
+    M2["M services/BeerService.java"]
+    M3["M services/BeerServiceImpl.java"]
+    M4["M services/BeerServiceJPA.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+    T1["M test: controller/BeerControllerTest.java"]
+    T2["M test: repositories/BeerRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-local-97"><code>local-97</code></h3>
+<p>vs <code>local-96</code> — 1 file(s) changed: adding sort</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding sort"]
+  subgraph M["src/main/java"]
+    M0["M services/BeerServiceJPA.java"]
+  end
+</pre>
+<h3 id="br-local-98"><code>local-98</code></h3>
+<p>vs <code>local-97</code> — 1 file(s) changed: adding sql script</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding sql script"]
+  subgraph O["other"]
+    O0["A src/scripts/add-order-tables.sql"]
+  end
+</pre>
+<h3 id="br-local-99"><code>local-99</code></h3>
+<p>vs <code>local-98</code> — 1 file(s) changed: adding migration script</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding migration script"]
+  subgraph R["resources"]
+    R0["A res: db/migration/V3__add-order-tables.sql"]
+  end
+</pre>
+<h3 id="br-local-100"><code>local-100</code></h3>
+<p>vs <code>local-99</code> — 3 file(s) changed: Fix package names · update to use @UuidGenerator</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: Fix package names<br/>update to use @UuidGenerator<br/>adding one to many customer to beer order"]
+  subgraph M["src/main/java"]
+    M0["A entities/BeerOrder.java"]
+    M1["A entities/BeerOrderLine.java"]
+    M2["M entities/Customer.java"]
+  end
+</pre>
+<h3 id="br-local-101"><code>local-101</code></h3>
+<p>vs <code>local-100</code> — 4 file(s) changed: adding milestone repos · removing milestone repos</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding milestone repos<br/>removing milestone repos<br/>completing assignment"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+    M1["M entities/BeerOrder.java"]
+    M2["M entities/BeerOrderLine.java"]
+  end
+</pre>
+<h3 id="br-local-102"><code>local-102</code></h3>
+<p>vs <code>local-101</code> — 2 file(s) changed: adding beer order repository</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding beer order repository"]
+  subgraph M["src/main/java"]
+    M0["A repositories/BeerOrderRepository.java"]
+  end
+  subgraph T["src/test"]
+    T0["A test: repositories/BeerOrderRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-local-103"><code>local-103</code></h3>
+<p>vs <code>local-102</code> — 1 file(s) changed: adding persistence test</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding persistence test"]
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerOrderRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-local-104"><code>local-104</code></h3>
+<p>vs <code>local-103</code> — 3 file(s) changed: adding helper methods</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding helper methods"]
+  subgraph M["src/main/java"]
+    M0["M entities/BeerOrder.java"]
+    M1["M entities/Customer.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerOrderRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-local-105"><code>local-105</code></h3>
+<p>vs <code>local-104</code> — 3 file(s) changed: adding many to many example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding many to many example"]
+  subgraph R["resources"]
+    R0["A res: db/migration/V4__category.sql"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+    M1["A entities/Category.java"]
+  end
+</pre>
+<h3 id="br-local-106"><code>local-106</code></h3>
+<p>vs <code>local-105</code> — 4 file(s) changed: update to use @UuidGenerator · adding many to many persistence example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update to use @UuidGenerator<br/>adding many to many persistence example"]
+  subgraph M["src/main/java"]
+    M0["M entities/Beer.java"]
+    M1["M entities/Category.java"]
+    M2["A repositories/CategoryRepository.java"]
+  end
+  subgraph T["src/test"]
+    T0["A test: repositories/CategoryRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-local-107"><code>local-107</code></h3>
+<p>vs <code>local-106</code> — 3 file(s) changed: update to use @UuidGenerator · adding one to one example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: update to use @UuidGenerator<br/>adding one to one example"]
+  subgraph R["resources"]
+    R0["A res: db/migration/V5__order-shipment.sql"]
+  end
+  subgraph M["src/main/java"]
+    M0["M entities/BeerOrder.java"]
+    M1["A entities/BeerOrderShipment.java"]
+  end
+</pre>
+<h3 id="br-local-108"><code>local-108</code></h3>
+<p>vs <code>local-107</code> — 2 file(s) changed: fix missing import · adding one to one persistence example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix missing import<br/>adding one to one persistence example<br/>adding one to one persistence example"]
+  subgraph M["src/main/java"]
+    M0["M entities/BeerOrder.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerOrderRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-108-rel-one-to-one-pers"><code>108-rel-one-to-one-pers</code></h3>
+<p>vs <code>local-107</code> — 2 file(s) changed: fix missing import · adding one to one persistence example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: fix missing import<br/>adding one to one persistence example<br/>adding one to one persistence example"]
+  subgraph M["src/main/java"]
+    M0["M entities/BeerOrder.java"]
+  end
+  subgraph T["src/test"]
+    T0["M test: repositories/BeerOrderRepositoryTest.java"]
+  end
+</pre>
+<h3 id="br-109-lock-demo-optimistic"><code>109-lock-demo-optimistic</code></h3>
+<p>vs <code>108-rel-one-to-one-pers</code> — 1 file(s) changed: adding import · adding one to one persistence example</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: adding import<br/>adding one to one persistence example"]
+  subgraph T["src/test"]
+    T0["M test: controller/BeerControllerIT.java"]
+  end
+</pre>
+<h3 id="br-110-spring-sec-maven-deps"><code>110-spring-sec-maven-deps</code></h3>
+<p>vs <code>109-lock-demo-optimistic</code> — 17 file(s) changed: chore: update localmysql configuration, docs, logs, and workspace configs · fix merge error</p>
+<pre class="mermaid">
+flowchart TB
+  CM["commits: chore: update localmysql configuration, docs, logs, and workspace configs<br/>fix merge error<br/>adding Spring Security"]
+  subgraph B["build"]
+    B0["M pom.xml"]
+  end
+  subgraph R["resources"]
+    R0["M res: application-localmysql.properties"]
+  end
+  subgraph O["other"]
+    O0["A .commandcode/settings.json"]
+    O1["A .commandcode/taste/taste-profile/taste.md"]
+    O2["A .commandcode/taste/taste.md"]
+    O3["A .qoder/settings.local.json"]
+    O4["A 2026-09-24-223213-export.txt"]
+    O5["A BRANCH_2_LOMBOK_BUILDERS.md"]
+    O6["A MARIADB_LOCALMYSQL_RUN.md"]
+    O7["A SESSION_BRANCH_CHANGELOG.html"]
+    O8["A SESSION_BRANCH_CHANGELOG.md"]
+    O9["A boot.log"]
+    Ox["... +5 more"]
+  end
+</pre>
 </main>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+await mermaid.run({ querySelector: 'pre.mermaid' });
+
+document.querySelectorAll('pre.mermaid').forEach((pre) => {
+  // find nearest preceding heading for the toolbar title
+  let el = pre.previousElementSibling, title = '';
+  while (el && !title) {
+    if (/^H[2-4]$/.test(el.tagName)) title = el.textContent;
+    el = el.previousElementSibling;
+  }
+
+  const canvas = document.createElement('div');
+  canvas.className = 'diagram-canvas';
+  const bar = document.createElement('div');
+  bar.className = 'diagram-toolbar';
+  const view = document.createElement('div');
+  view.className = 'diagram-viewport';
+  const stage = document.createElement('div');
+  stage.className = 'diagram-stage';
+
+  pre.parentNode.insertBefore(canvas, pre);
+  stage.appendChild(pre);
+  view.appendChild(stage);
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'diagram-title';
+  titleEl.textContent = title;
+  const zoomLabel = document.createElement('span');
+  zoomLabel.className = 'diagram-zoom-label';
+  const mkBtn = (label, hint, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label; b.title = hint;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  const expandBtn = mkBtn('\u26F6', 'Toggle height', () => view.classList.toggle('expanded'));
+
+  let scale = 1, tx = 0, ty = 0;
+  const apply = () => {
+    stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+  };
+  const zoomAt = (cx, cy, factor) => {
+    const ns = Math.min(8, Math.max(0.1, scale * factor));
+    tx = cx - (cx - tx) * (ns / scale);
+    ty = cy - (cy - ty) * (ns / scale);
+    scale = ns;
+    apply();
+  };
+  const fit = () => {
+    const vw = view.clientWidth, vh = view.clientHeight;
+    const w = pre.scrollWidth, h = pre.scrollHeight;
+    scale = Math.min(1, Math.max(0.1, Math.min((vw - 24) / w, (vh - 24) / h)));
+    tx = Math.max(12, (vw - w * scale) / 2);
+    ty = Math.max(12, (vh - h * scale) / 2);
+    apply();
+  };
+
+  bar.append(
+    titleEl,
+    mkBtn('\u2212', 'Zoom out', () => zoomAt(view.clientWidth / 2, view.clientHeight / 2, 1 / 1.25)),
+    zoomLabel,
+    mkBtn('+', 'Zoom in', () => zoomAt(view.clientWidth / 2, view.clientHeight / 2, 1.25)),
+    mkBtn('\u21BA', 'Fit / reset', fit),
+    expandBtn
+  );
+  canvas.append(bar, view);
+
+  view.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = view.getBoundingClientRect();
+    zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
+
+  let panning = false, sx = 0, sy = 0;
+  view.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    panning = true; sx = e.clientX - tx; sy = e.clientY - ty;
+    view.classList.add('panning');
+    view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener('pointermove', (e) => {
+    if (!panning) return;
+    tx = e.clientX - sx; ty = e.clientY - sy;
+    apply();
+  });
+  const endPan = (e) => { panning = false; view.classList.remove('panning'); };
+  view.addEventListener('pointerup', endPan);
+  view.addEventListener('pointercancel', endPan);
+
+  requestAnimationFrame(fit);
+});
 </script>
 </body>
 </html>
